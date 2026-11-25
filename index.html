@@ -69,7 +69,7 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
 <body>
 <header>
   <h1>Mapa de Acupuntura <span>· 针灸穴位图</span></h1>
-  <p class="sub">14 canales · 100 puntos · nombre chino, pinyin y traducción al español</p>
+  <p class="sub">14 canales · <span id="total">103</span> puntos · nombre chino, pinyin y traducción al español</p>
 </header>
 
 <div class="wrap">
@@ -96,6 +96,8 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
   <div class="list" id="list"></div>
 
   <footer>
+    <strong>Material educativo.</strong> No reemplaza la consulta, el diagnóstico ni el tratamiento
+    de un profesional de la salud. La punción y la moxa requieren formación.<br>
     Las posiciones son esquemáticas y orientativas: sirven para ubicar el canal,
     no reemplazan la localización anatómica por cun ni los textos de referencia.
   </footer>
@@ -206,7 +208,7 @@ const RAW = [
 ["VB",39,"悬钟","Xuánzhōng","Campana Suspendida","f",42,651,"Reunión de las médulas: rigidez cervical, ciática, acúfenos, anemia."],
 ["VB",40,"丘墟","Qiūxū","Ruina del Montículo","f",40,691,"Esguince de tobillo, dolor en hipocondrio, dolor torácico lateral."],
 ["VB",41,"足临泣","Zúlínqì","Lágrimas que Caen del Pie","f",36,713,"Migraña, mastitis, dolor ocular, trastornos menstruales."],
-["H",1,"大敦","Dàdūn","Gran Montículo","f",26,733,"Hernia, dolor genital, metrorragia, enuresis."],
+["H",1,"大敦","Dàdūn","Gran Espesor","f",26,733,"Hernia, dolor genital, metrorragia, enuresis."],
 ["H",2,"行间","Xíngjiān","Paso Intermedio","f",30,727,"Irritabilidad, ojos rojos, cefalea, dismenorrea. Dispersa fuego del Hígado."],
 ["H",3,"太冲","Tàichōng","Gran Embestida","f",28,717,"Punto clave del Hígado: estrés, cefalea, mareo, dismenorrea, insomnio, hipertensión."],
 ["H",8,"曲泉","Qūquán","Fuente Sinuosa","f",16,501,"Dolor genital, prurito vulvar, disuria, dolor de rodilla medial."],
@@ -215,7 +217,7 @@ const RAW = [
 ["RM",3,"中极","Zhōngjí","Centro Culminante","f",0,301,"Disuria, cistitis, incontinencia, dismenorrea. Punto Mu de la Vejiga.",1],
 ["RM",4,"关元","Guānyuán","Puerta del Origen","f",0,286,"Gran tonificante del Yuan Qi: fatiga, infertilidad, frío, diarrea crónica. Punto Mu del Intestino Delgado.",1],
 ["RM",6,"气海","Qìhǎi","Mar de Qi","f",0,272,"Fatiga, debilidad general, distensión abdominal, prolapsos. Tonifica el Qi.",1],
-["RM",8,"神阙","Shénquè","Puerta del Espíritu (ombligo)","f",0,253,"Diarrea por frío, dolor abdominal, colapso. Solo moxa, no se punciona.",1],
+["RM",8,"神阙","Shénquè","Portal del Espíritu (ombligo)","f",0,253,"Diarrea por frío, dolor abdominal, colapso. Solo moxa, no se punciona.",1],
 ["RM",12,"中脘","Zhōngwǎn","Centro del Epigastrio","f",0,233,"Gastralgia, náusea, reflujo, distensión. Punto Mu del Estómago.",1],
 ["RM",17,"膻中","Dànzhōng","Centro del Pecho","f",0,173,"Opresión torácica, disnea, angustia, lactancia escasa. Mar del Qi superior.",1],
 ["RM",22,"天突","Tiāntū","Chimenea Celestial","f",0,129,"Tos, asma, afonía, sensación de bulto en la garganta.",1],
@@ -273,6 +275,8 @@ function silhouette(view){
 /* ---------- estado ---------- */
 let view='f', filter=null, sel=null, query='';
 const $ = id => document.getElementById(id);
+
+$('total').textContent = PTS.length;
 
 /* chips de canal */
 $('chips').innerHTML = `<button class="chip on" data-m="">Todos</button>` +
