@@ -31,18 +31,17 @@ input[type=search]:focus{border-color:var(--gold)}
   border-radius:999px;padding:6px 11px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px}
 .chip.on{color:#fff;border-color:transparent}
 .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
-.stage{background:radial-gradient(ellipse at 50% 35%,#211c18,#141210);
-  border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative}
-svg{display:block;width:100%;height:auto;touch-action:manipulation}
-.body-fill{fill:#2e2823;stroke:#4a3f37;stroke-width:1.2}
-.pt{cursor:pointer}
-.pt circle.hit{fill:transparent}
-.pt circle.vis{stroke:#15120f;stroke-width:1}
-.pt.sel circle.vis{stroke:#fff;stroke-width:2}
-.pt.dim{opacity:.13}
-.lbl{font-size:7.5px;fill:#efe7dd;paint-order:stroke;stroke:#15120f;stroke-width:2.2px;
-  stroke-linejoin:round;pointer-events:none;font-weight:700}
-.viewname{font-size:10px;fill:#6f645c;letter-spacing:2px}
+.stage{background:radial-gradient(ellipse at 50% 38%,#fff 0%,#eef0f2 55%,#d5d8dc 100%);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;height:min(76vh,720px);min-height:430px}
+.stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.tools,.zones{position:absolute;top:8px;display:flex;flex-direction:column;gap:6px}
+.tools{right:8px}.zones{left:8px}
+.stage button{background:#fffd;border:1px solid #c9ccd1;color:#2b2623;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;padding:7px 10px}
+.stage button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tag{position:absolute;pointer-events:none;background:#1b1815;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:7px;transform:translate(10px,-130%);white-space:nowrap;display:none}
+.hint{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;color:#5d5752;pointer-events:none}
+.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#4a4440;font-size:13px;text-align:center;padding:20px 80px;pointer-events:none}
 .card{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
 .card.empty{color:var(--ink2);font-size:13px;text-align:center;padding:22px 14px}
 .code{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:7px;color:#fff}
@@ -75,20 +74,24 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
 <div class="wrap">
   <div class="row">
     <input type="search" id="q" placeholder="Buscar: 合谷, Hegu, IG4, valle…" autocomplete="off">
-    <div class="toggle">
-      <button id="bFront" class="on">Frente</button>
-      <button id="bBack">Dorso</button>
-    </div>
   </div>
 
   <div class="chips" id="chips"></div>
 
-  <div class="stage">
-    <svg id="svg" viewBox="0 0 300 770" xmlns="http://www.w3.org/2000/svg">
-      <g id="silhouette"></g>
-      <g id="points"></g>
-      <text class="viewname" id="vn" x="150" y="762" text-anchor="middle">VISTA ANTERIOR</text>
-    </svg>
+  <div class="stage" id="stage">
+    <div class="msg" id="msg">Modelando el muñeco…</div>
+    <div class="zones" id="zones">
+      <button data-z="all" class="on">Cuerpo</button><button data-z="head">Cabeza</button>
+      <button data-z="hand">Mano</button><button data-z="foot">Pie</button>
+    </div>
+    <div class="tools" id="views">
+      <button data-a="0">Frente</button><button data-a="180">Dorso</button>
+      <button data-a="90">Lado izq.</button><button data-a="-90">Lado der.</button>
+      <button id="zin" aria-label="Acercar">＋</button><button id="zout" aria-label="Alejar">－</button>
+      <button id="lines" class="on">Líneas</button>
+    </div>
+    <div class="tag" id="tag"></div>
+    <div class="hint">Arrastra para girar · acerca con la rueda o dos dedos</div>
   </div>
 
   <div class="count" id="count"></div>
@@ -103,11 +106,12 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
   </footer>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ---------- canales ---------- */
 const M = {
-  P :{es:"Pulmón",             hz:"手太阴肺经", c:"#e3e3e3", el:"Metal"},
-  IG:{es:"Intestino Grueso",   hz:"手阳明大肠经", c:"#b9b2a6", el:"Metal"},
+  P :{es:"Pulmón",             hz:"手太阴肺经", c:"#8b97a5", el:"Metal"},
+  IG:{es:"Intestino Grueso",   hz:"手阳明大肠经", c:"#8a6d3b", el:"Metal"},
   E :{es:"Estómago",           hz:"足阳明胃经", c:"#d9a84e", el:"Tierra"},
   BP:{es:"Bazo-Páncreas",      hz:"足太阴脾经", c:"#c9872f", el:"Tierra"},
   C :{es:"Corazón",            hz:"手少阴心经", c:"#d94f3d", el:"Fuego"},
@@ -234,46 +238,375 @@ const RAW = [
 const PTS = RAW.map((r,i)=>({id:i,mer:r[0],num:r[1],hz:r[2],py:r[3],es:r[4],view:r[5],dx:r[6],y:r[7],ind:r[8],mid:!!r[9]}));
 const code = p => p.mer + p.num;
 
-/* ---------- silueta ---------- */
-const CX = 150;
-function silhouette(view){
-  const back = view==='b';
-  const p = [];
-  // cabeza + cuello
-  p.push(`<ellipse class="body-fill" cx="${CX}" cy="62" rx="40" ry="48"/>`);
-  p.push(`<rect class="body-fill" x="${CX-14}" y="100" width="28" height="30" rx="8"/>`);
-  // torso
-  p.push(`<path class="body-fill" d="M ${CX-50} 134 Q ${CX-56} 150 ${CX-48} 196
-    L ${CX-46} 250 Q ${CX-48} 300 ${CX-40} 335 L ${CX+40} 335
-    Q ${CX+48} 300 ${CX+46} 250 L ${CX+48} 196 Q ${CX+56} 150 ${CX+50} 134 Z"/>`);
-  // brazos
-  for(const s of [-1,1]){
-    p.push(`<path class="body-fill" d="M ${CX+s*48} 136
-      Q ${CX+s*70} 180 ${CX+s*74} 262
-      Q ${CX+s*82} 320 ${CX+s*86} 358
-      L ${CX+s*96} 356 Q ${CX+s*92} 300 ${CX+s*86} 258
-      Q ${CX+s*78} 180 ${CX+s*60} 134 Z"/>`);
-    p.push(`<path class="body-fill" d="M ${CX+s*82} 356 Q ${CX+s*98} 368 ${CX+s*96} 400
-      Q ${CX+s*90} 412 ${CX+s*82} 404 Q ${CX+s*78} 378 ${CX+s*78} 358 Z"/>`);
+/* ---------- muñeco 3D ----------
+   Coordenadas del modelo: x lateral, y hacia abajo (0 = coronilla), z hacia el frente.
+   Se modela un lado (x>0, el izquierdo del muñeco) y se refleja. */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+function smin(a,b,k){ const h=clamp(.5+.5*(b-a)/k,0,1); return b+(a-b)*h-k*h*(1-h); }
+/* cono redondeado entre a y b; kz aplana en z, ky en y */
+function cone(x,y,z,a,b,ra,rb,kz=1,ky=1){
+  const dx=b[0]-a[0], dy=(b[1]-a[1])/ky, dz=(b[2]-a[2])/kz;
+  const px=x-a[0], py=(y-a[1])/ky, pz=(z-a[2])/kz;
+  const t=clamp((px*dx+py*dy+pz*dz)/(dx*dx+dy*dy+dz*dz),0,1);
+  return (Math.hypot(px-dx*t,py-dy*t,pz-dz*t)-(ra+(rb-ra)*t))*Math.min(kz,ky);
+}
+function ellipsoid(x,y,z,cx,cy,cz,rx,ry,rz){
+  const a=(x-cx)/rx, b=(y-cy)/ry, c=(z-cz)/rz;
+  return (Math.sqrt(a*a+b*b+c*c)-1)*Math.min(rx,ry,rz);
+}
+/* tronco: [y, semiancho, semifondo, centro z] */
+const TRUNK=[[112,15,15,-3],[124,24,18,-3],[133,43,21,-2],[145,52,25,-1],[165,50,31,1],[185,45,31,1],
+ [210,40,27,0],[240,36,24,0],[262,36,24,0],[290,42,27,-1],[312,46,29,-2],[330,43,27,-2],[346,24,18,-2]];
+function torso(x,y,z){
+  let i=0; while(i<TRUNK.length-2 && y>TRUNK[i+1][0]) i++;
+  const p=TRUNK[i], q=TRUNK[i+1], t=clamp((y-p[0])/(q[0]-p[0]),0,1);
+  const a=p[1]+(q[1]-p[1])*t, b=p[2]+(q[2]-p[2])*t, c=p[3]+(q[3]-p[3])*t;
+  const d=(Math.sqrt((x/a)**2+((z-c)/b)**2)-1)*Math.min(a,b);
+  const e=Math.max(TRUNK[0][0]-y, y-TRUNK[TRUNK.length-1][0]);
+  return Math.min(Math.max(d,e),0)+Math.hypot(Math.max(d,0),Math.max(e,0));
+}
+function sdTrunk(x,y,z){
+  x=Math.abs(x);
+  let d=torso(x,y,z);
+  d=smin(d,cone(x,y,z,[0,88,-4],[0,128,-4],19,19),7);
+  let h=ellipsoid(x,y,z,0,52,0,32,42,36);
+  h=smin(h,ellipsoid(x,y,z,0,73,9,23,23,26),9);
+  h=smin(h,cone(x,y,z,[0,52,35],[0,66,39],2,4),3);
+  h=smin(h,ellipsoid(x,y,z,32,60,-3,4,11,7),2);
+  d=smin(d,h,6);
+  return smin(d,cone(x,y,z,[26,141,-3],[52,148,-2],14,16),10);
+}
+function sdArm(x,y,z){
+  x=Math.abs(x);
+  let d=cone(x,y,z,[56,148,-2],[73,262,-3],16.5,11.5);
+  d=smin(d,cone(x,y,z,[73,262,-3],[77,290,-1],11.5,13),4);
+  d=smin(d,cone(x,y,z,[77,290,-1],[89,357,0],13,7.5,.85),4);
+  let h=cone(x,y,z,[89.5,362,0],[91,383,0],10.5,11,.46);
+  [[83,401],[89,408],[95,410],[101,404]].forEach((f,i)=>{
+    h=smin(h,cone(x,y,z,[84+i*4.9,383,0],[f[0],f[1],0],3,2.5),1);
+  });
+  h=smin(h,cone(x,y,z,[96,366,1],[109,390,3],5,3),3);
+  return smin(d,h,4);
+}
+function sdLeg(x,y,z){
+  x=Math.abs(x);
+  let d=cone(x,y,z,[23,322,-1],[25,500,0],22.5,14.5);
+  d=smin(d,cone(x,y,z,[25,500,0],[28,552,-4],14.5,17),7);
+  d=smin(d,cone(x,y,z,[28,552,-4],[27,694,-3],17,8),7);
+  d=smin(d,ellipsoid(x,y,z,25,494,10,9,12,7),4);
+  d=smin(d,cone(x,y,z,[27,704,-4],[29,722,-6],8.5,11),6);
+  d=smin(d,cone(x,y,z,[28,721,-6],[30,724,26],12,11,1,.72),5);
+  [[22,46,4],[28,45,3],[32.5,43,2.8],[36.5,41,2.7],[40,38,2.6]].forEach(t=>{
+    d=smin(d,cone(x,y,z,[t[0],727,25],[t[0],727,t[1]],t[2],t[2]),1.4);
+  });
+  return d;
+}
+/* cajas para no evaluar partes lejanas */
+function sdBody(x,y,z){
+  const ax=Math.abs(x);
+  let d=40;
+  if(y<362 && ax<80) d=sdTrunk(x,y,z);
+  if(y>120 && y<425 && ax>20) d=smin(d,sdArm(x,y,z),7);
+  if(y>290 && ax<62) d=smin(d,sdLeg(x,y,z),y<370?9:.8);
+  return d;
+}
+const SDF={T:sdTrunk,A:sdArm,L:sdLeg};
+const world = p => [p[0], 385-p[1], p[2]];
+function grad(x,y,z){
+  const e=.6;
+  const g=[sdBody(x+e,y,z)-sdBody(x-e,y,z), sdBody(x,y+e,z)-sdBody(x,y-e,z), sdBody(x,y,z+e)-sdBody(x,y,z-e)];
+  const l=Math.hypot(...g)||1; return g.map(v=>v/l);
+}
+
+/* surface nets: convierte el campo de distancias en una malla lisa */
+function buildMesh(step){
+  const x0=-124,y0=0,z0=-54, nx=Math.ceil(248/step)+1, ny=Math.ceil(744/step)+1, nz=Math.ceil(114/step)+1;
+  const f=new Float32Array(nx*ny*nz), id=(i,j,k)=>i+nx*(j+ny*k);
+  for(let k=0;k<nz;k++) for(let j=0;j<ny;j++) for(let i=0;i<nx;i++)
+    f[id(i,j,k)]=sdBody(x0+i*step,y0+j*step,z0+k*step);
+  const vid=new Int32Array(nx*ny*nz).fill(-1), pos=[], nor=[], idx=[];
+  for(let k=0;k<nz-1;k++) for(let j=0;j<ny-1;j++) for(let i=0;i<nx-1;i++){
+    let sx=0,sy=0,sz=0,n=0;
+    for(let c=0;c<8;c++) for(const bit of [1,2,4]){
+      if(c&bit) continue;
+      const o=c|bit;
+      const a=f[id(i+(c&1),j+(c>>1&1),k+(c>>2&1))], b=f[id(i+(o&1),j+(o>>1&1),k+(o>>2&1))];
+      if((a<0)===(b<0)) continue;
+      const t=a/(a-b);
+      sx+=(c&1)+((o&1)-(c&1))*t; sy+=(c>>1&1)+((o>>1&1)-(c>>1&1))*t; sz+=(c>>2&1)+((o>>2&1)-(c>>2&1))*t; n++;
+    }
+    if(!n) continue;
+    const x=x0+(i+sx/n)*step, y=y0+(j+sy/n)*step, z=z0+(k+sz/n)*step;
+    vid[id(i,j,k)]=pos.length/3;
+    pos.push(...world([x,y,z]));
+    const g=grad(x,y,z); nor.push(g[0],-g[1],g[2]);
   }
-  // piernas
-  for(const s of [-1,1]){
-    p.push(`<path class="body-fill" d="M ${CX+s*8} 332
-      L ${CX+s*48} 332 Q ${CX+s*46} 420 ${CX+s*42} 500
-      Q ${CX+s*44} 600 ${CX+s*40} 700
-      L ${CX+s*16} 700 Q ${CX+s*14} 600 ${CX+s*16} 500
-      Q ${CX+s*12} 420 ${CX+s*8} 332 Z"/>`);
-    p.push(`<path class="body-fill" d="M ${CX+s*16} 698 L ${CX+s*40} 698
-      Q ${CX+s*42} 724 ${CX+s*36} 738 L ${CX+s*18} 738 Q ${CX+s*14} 720 ${CX+s*16} 698 Z"/>`);
+  const quad=(out,a,b,c,d)=>{ if(a<0||b<0||c<0||d<0) return; if(out) idx.push(a,c,b,a,d,c); else idx.push(a,b,c,a,c,d); };
+  for(let k=1;k<nz-1;k++) for(let j=1;j<ny-1;j++) for(let i=1;i<nx-1;i++){
+    const v=f[id(i,j,k)]<0;
+    if(v!==(f[id(i+1,j,k)]<0)) quad(v,vid[id(i,j-1,k-1)],vid[id(i,j,k-1)],vid[id(i,j,k)],vid[id(i,j-1,k)]);
+    if(v!==(f[id(i,j+1,k)]<0)) quad(v,vid[id(i-1,j,k-1)],vid[id(i-1,j,k)],vid[id(i,j,k)],vid[id(i,j,k-1)]);
+    if(v!==(f[id(i,j,k+1)]<0)) quad(v,vid[id(i-1,j-1,k)],vid[id(i,j-1,k)],vid[id(i,j,k)],vid[id(i-1,j,k)]);
   }
-  // línea media / columna
-  if(back) p.push(`<line x1="${CX}" y1="120" x2="${CX}" y2="332" stroke="#50443b" stroke-width="2" stroke-dasharray="4 4"/>`);
-  else     p.push(`<line x1="${CX}" y1="130" x2="${CX}" y2="310" stroke="#463c34" stroke-width="1" stroke-dasharray="3 5"/>`);
-  return p.join('');
+  return {pos,nor,idx};
+}
+
+/* ---------- ubicación esquemática de cada punto ----------
+   F/B x y : en (x,y) hacia el frente / dorso
+   T/A/L y ángulo : tronco-cabeza, brazo, pierna (0 frente, 90 lateral, 180 dorso, -90 medial)
+   R x y z dx dy dz : rayo libre (manos y pies) */
+const AXIS={T:[[0,0,0],[0,360,0]], A:[[56,140,-2],[73,262,-3],[77,290,-1],[89,357,0],[90,430,0]],
+  L:[[23,310,-1],[25,500,0],[28,552,-4],[27,694,-3],[28,712,-5]]};
+const POS={
+P1:'F 37 150',P5:'A 262 28',P7:'A 343 62',P9:'F 94 358',P11:'R 107 388 3 1 0 0',
+IG1:'R 100.6 402 0 1 0 0',IG4:'B 99 373',IG10:'A 284 112',IG11:'A 259 100',IG15:'A 150 62',IG20:'F 7 68',
+E1:'F 13 59',E4:'F 12 79',E6:'T 83 55',E7:'T 67 68',E25:'F 13 266',E34:'L 470 30',E36:'L 530 28',E40:'L 590 40',E44:'R 31 724 27 0 -1 0',
+BP1:'R 22 727 42 -1 0 0',BP3:'R 27 724 24 -1 0 0',BP4:'R 28 723 13 -1 0 0',BP6:'L 645 -95',BP9:'L 520 -88',BP10:'L 470 -42',BP21:'T 200 90',
+C1:'A 175 -62',C3:'A 264 -65',C5:'A 342 -55',C6:'A 350 -55',C7:'F 84 358',C9:'R 83.2 399 0 1 0 0',
+ID3:'R 87 383 0 -1 0 0',ID6:'A 347 218',ID9:'B 47 170',ID11:'B 29 170',ID18:'F 20 68',ID19:'T 63 84',
+V1:'F 6 53',V2:'F 8 47',V10:'B 8 92',V13:'B 13 155',V15:'B 13 177',V18:'B 13 212',V20:'B 13 233',V23:'B 13 259',V25:'B 13 285',
+V40:'L 500 180',V57:'L 592 180',V60:'L 692 128',V62:'L 702 95',V67:'R 40 727 36 1 0 0',
+R1:'R 29 723 17 0 1 0',R3:'L 690 -122',R6:'L 701 -92',R7:'L 662 -125',R10:'L 500 -138',R27:'F 12 137',
+PC3:'A 262 -12',PC6:'A 334 0',PC7:'F 89 358',PC8:'F 92 376',PC9:'R 95 405 0 0 1 0',
+TR1:'R 88.7 404 0 -1 0 0',TR3:'B 87 379',TR4:'B 89 357',TR5:'A 334 180',TR14:'A 155 135',TR17:'T 74 104',TR21:'T 57 82',TR23:'F 22 46',
+VB2:'T 70 83',VB14:'F 13 34',VB20:'B 16 88',VB21:'R 31 142 -3 0 -1 0',VB30:'T 322 138',VB31:'L 432 90',VB34:'L 522 68',VB39:'L 652 78',VB40:'L 700 52',VB41:'R 35 724 20 0 -1 0',
+H1:'R 22 727 42 1 0 0',H2:'R 25.5 726 31 0 -1 0',H3:'R 26 724 20 0 -1 0',H8:'L 495 -102',H13:'T 242 68',H14:'F 26 198',
+RM3:'F 0 307',RM4:'F 0 293',RM6:'F 0 279',RM8:'F 0 264',RM12:'F 0 232',RM17:'F 0 177',RM22:'F 0 127',RM24:'F 0 86',
+DM1:'B 0 336',DM3:'B 0 285',DM4:'B 0 259',DM14:'B 0 126',DM16:'B 0 88',DM20:'R 0 50 0 0 -1 0',DM26:'F 0 74'
+};
+/* puntos de paso para que las líneas sigan el cuerpo */
+const VIA={
+P1:['A 175 35','A 215 35'],
+IG4:['A 320 100'],IG11:['A 200 90'],IG15:['T 108 60'],
+E7:['T 108 30','F 20 150','F 22 200'],E25:['F 17 310','L 380 25'],E40:['L 650 25','L 700 12'],
+BP10:['L 400 -40','F 22 305','F 30 240'],
+C1:['A 215 -65'],
+ID6:['A 300 225','A 220 205'],
+V2:['F 7 30','R 7 40 0 0 -1 0','B 8 50'],V25:['B 18 330','L 400 180'],V57:['L 650 160'],
+R10:['L 420 -120','F 5 315','F 9 230','F 11 175'],
+PC3:['A 205 -5'],
+TR5:['A 262 180','A 200 150'],TR14:['T 112 105'],
+VB30:['L 380 95'],
+H8:['L 400 -75','F 14 320'],
+DM4:['B 0 190'],DM20:['R 0 50 0 0 -.6 .8','F 0 30']
+};
+function surface(spec){
+  const a=spec.split(' '), t=a[0], n=a.slice(1).map(Number);
+  let o,d,f=sdBody;
+  if(t==='F'||t==='B'){ o=[n[0],n[1],-2]; d=[0,0,t==='F'?1:-1]; }
+  else if(t==='R'){ o=n.slice(0,3); d=n.slice(3); }
+  else {
+    const ax=AXIS[t]; let i=0; while(i<ax.length-2 && n[0]>ax[i+1][1]) i++;
+    const p=ax[i], q=ax[i+1], u=(n[0]-p[1])/(q[1]-p[1]), r=n[1]*Math.PI/180;
+    o=[p[0]+(q[0]-p[0])*u, n[0], p[2]+(q[2]-p[2])*u]; d=[Math.sin(r),0,Math.cos(r)]; f=SDF[t];
+  }
+  const at=s=>[o[0]+d[0]*s,o[1]+d[1]*s,o[2]+d[2]*s];
+  let s=0; while(s<90 && f(...at(s))<0) s+=.4;
+  return snap(at(s),.6);
+}
+/* lleva un punto a la superficie, separado "lift" unidades */
+function snap(p,lift){
+  let q=p.slice();
+  for(let i=0;i<5;i++){ const d=sdBody(...q)-lift, g=grad(...q); q=q.map((v,j)=>v-g[j]*d); }
+  return q;
+}
+
+function createScene(){
+  const stage=$('stage'), none={update(){},focus(){}};
+  const fail=t=>{ $('msg').textContent=t+' La búsqueda y las fichas siguen disponibles.'; return none; };
+  if(!window.THREE) return fail('No se pudo cargar el motor 3D. Revisa tu conexión y recarga.');
+  let renderer;
+  try{ renderer=new THREE.WebGLRenderer({antialias:true,alpha:true}); }
+  catch(e){ return fail('Este navegador no puede mostrar gráficos 3D.'); }
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  stage.prepend(renderer.domElement);
+  const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(24,1,10,9000), model=new THREE.Group();
+  scene.add(model);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x8f8474,.68));
+  const sun=new THREE.DirectionalLight(0xffffff,.36); sun.position.set(.5,.7,1); camera.add(sun); scene.add(camera);
+
+  let body=null;
+  const marks=[], lines=new THREE.Group(), chans={};
+  const V=p=>new THREE.Vector3(...world(p));
+  const mirror=p=>[-p[0],p[1],p[2]];
+  const dotGeo=new THREE.SphereGeometry(1,12,10);
+
+  function build(){
+    const m=buildMesh(2.1), g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(m.pos,3));
+    g.setAttribute('normal',new THREE.Float32BufferAttribute(m.nor,3));
+    g.setIndex(m.idx);
+    body=new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:0xeadcc0,specular:0x1c1c1c,shininess:30}));
+    model.add(body);
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(92,98,20,64),new THREE.MeshPhongMaterial({color:0xfaf8f4,shininess:60}));
+    base.position.y=385-743; model.add(base);
+
+    for(const p of PTS){
+      const at=surface(POS[code(p)]);
+      for(const q of (p.mid?[at]:[at,mirror(at)])){
+        const dot=new THREE.Mesh(dotGeo,new THREE.MeshBasicMaterial({color:M[p.mer].c,transparent:true}));
+        dot.position.copy(V(q));
+        const n=grad(...q);
+        const rim=new THREE.Mesh(dotGeo,new THREE.MeshBasicMaterial({color:0x1b1815,side:THREE.BackSide,transparent:true}));
+        rim.scale.setScalar(1.35); dot.add(rim);
+        model.add(dot);
+        marks.push({p,dot,rim,n:new THREE.Vector3(n[0],-n[1],n[2]),left:q[0]>=0});
+      }
+    }
+    for(const k of Object.keys(M)){
+      const mat=new THREE.MeshBasicMaterial({color:M[k].c,transparent:true});
+      chans[k]=mat;
+      const route=[];
+      PTS.filter(p=>p.mer===k).forEach(p=>{
+        route.push(surface(POS[code(p)]));
+        (VIA[code(p)]||[]).forEach(v=>route.push(surface(v)));
+      });
+      const pts=[];
+      for(let i=0;i<route.length-1;i++){
+        const a=route[i], b=route[i+1], n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])/4));
+        for(let j=0;j<n;j++) pts.push(snap(a.map((v,c)=>v+(b[c]-v)*j/n),.7));
+      }
+      pts.push(route[route.length-1]);
+      const mid=k==='RM'||k==='DM';
+      for(const side of (mid?[pts]:[pts,pts.map(mirror)])){
+        const curve=new THREE.CatmullRomCurve3(side.map(V),false,'centripetal');
+        lines.add(new THREE.Mesh(new THREE.TubeGeometry(curve,side.length*2,.6,5,false),mat));
+      }
+    }
+    model.add(lines);
+    $('msg').remove();
+    update(); if(sel!=null) focus(sel);
+  }
+
+  /* ----- cámara y gestos ----- */
+  const cur={a:25,x:0,y:-8,z:1}, goal={a:25,x:0,y:-8,z:1};
+  let dirty=true;
+  function resize(){
+    const w=stage.clientWidth,h=stage.clientHeight;
+    renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); dirty=true;
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+  const half=()=>Math.tan(camera.fov*Math.PI/360);
+  const fitDist=()=>Math.max(810/2, 290/2/camera.aspect)/half();
+  function step(){
+    let moving=false;
+    for(const k in goal){
+      const d=goal[k]-cur[k];
+      if(Math.abs(d)>.002){ cur[k]+=d*.18; moving=true; } else cur[k]=goal[k];
+    }
+    if(!moving && !dirty) return;
+    dirty=false;
+    model.rotation.y=-cur.a*Math.PI/180;
+    camera.position.set(cur.x,cur.y,fitDist()/cur.z); camera.lookAt(cur.x,cur.y,0);
+    const size=1/Math.pow(cur.z,.55);
+    for(const m of marks) m.dot.scale.setScalar((m.p.id===sel?5.2:2.9)*size);
+    scene.updateMatrixWorld(); camera.updateMatrixWorld();
+    renderer.render(scene,camera);
+    label();
+  }
+  function frame(){ requestAnimationFrame(frame); step(); }
+  const toScreen=v=>{ const q=v.clone().applyMatrix4(model.matrixWorld).project(camera);
+    return [(q.x+1)/2*stage.clientWidth,(1-q.y)/2*stage.clientHeight]; };
+  const ray=new THREE.Raycaster();
+  /* ¿el cuerpo no tapa el punto? */
+  function seen(m){
+    const w=m.dot.position.clone().applyMatrix4(model.matrixWorld);
+    const dir=w.sub(camera.position), len=dir.length();
+    ray.set(camera.position,dir.normalize());
+    const hit=ray.intersectObject(body)[0];
+    return !hit || hit.distance>len-3.5;
+  }
+  function label(){
+    const tag=$('tag'); let best=null;
+    if(sel!=null && body){
+      const front=m=>m.n.clone().applyQuaternion(model.quaternion).z;
+      best=marks.filter(m=>m.p.id===sel).sort((a,b)=>front(b)-front(a)).find(seen);
+    }
+    if(!best){ tag.style.display='none'; return; }
+    const [x,y]=toScreen(best.dot.position);
+    tag.textContent=code(best.p)+' · '+best.p.hz;
+    tag.style.display='block';
+    tag.style.left=Math.min(x,stage.clientWidth-100)+'px'; tag.style.top=y+'px';
+  }
+  function tap(px,py){
+    if(!body) return;
+    const near=[];
+    for(const m of marks){
+      if((filter&&m.p.mer!==filter)||!matches(m.p)) continue;
+      const [x,y]=toScreen(m.dot.position), d=Math.hypot(x-px,y-py);
+      if(d<16) near.push([d,m]);
+    }
+    const hit=near.sort((a,b)=>a[0]-b[0]).find(n=>seen(n[1]));
+    if(hit) pick(hit[1].p.id,false);
+  }
+  const mark=z=>[...$('zones').children].forEach(b=>b.classList.toggle('on',b.dataset.z===z));
+  const zoom=f=>{ goal.z=clamp(goal.z*f,1,9); if(goal.z===1){ goal.x=0; goal.y=-8; } mark(null); dirty=true; };
+  const el=renderer.domElement, down=new Map();
+  let moved=0, pinch=0;
+  el.addEventListener('pointerdown',e=>{ el.setPointerCapture(e.pointerId); if(!down.size) moved=0; down.set(e.pointerId,[e.clientX,e.clientY]); pinch=0; });
+  el.addEventListener('pointermove',e=>{
+    const prev=down.get(e.pointerId); if(!prev) return;
+    const dx=e.clientX-prev[0], dy=e.clientY-prev[1];
+    down.set(e.pointerId,[e.clientX,e.clientY]); moved+=Math.abs(dx)+Math.abs(dy);
+    if(down.size===2){
+      const [a,b]=[...down.values()], d=Math.hypot(a[0]-b[0],a[1]-b[1]);
+      if(pinch) zoom(d/pinch);
+      pinch=d; moved+=20; return;
+    }
+    goal.a=cur.a=cur.a-dx*.5;
+    /* al girar, el eje de la vista vuelve al centro del muñeco */
+    if(Math.abs(dx)>0) goal.x*=.9;
+    if(goal.z>1.05) goal.y=cur.y=clamp(cur.y+dy*2*fitDist()/cur.z*half()/stage.clientHeight,-355,345);
+    dirty=true;
+  });
+  const up=e=>{
+    if(!down.delete(e.pointerId)) return;
+    pinch=0;
+    if(e.type==='pointerup' && !down.size && moved<7){ const r=el.getBoundingClientRect(); tap(e.clientX-r.left,e.clientY-r.top); }
+  };
+  el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up);
+  el.addEventListener('wheel',e=>{ e.preventDefault(); zoom(Math.exp(-e.deltaY*.0015)); },{passive:false});
+  const turnTo=a=>{ goal.a=a+360*Math.round((cur.a-a)/360); };
+  $('views').addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(b){ turnTo(+b.dataset.a); goal.x=0; } });
+  $('zin').onclick=()=>zoom(1.5); $('zout').onclick=()=>zoom(1/1.5);
+  $('lines').onclick=e=>{ lines.visible=!lines.visible; e.target.classList.toggle('on',lines.visible); dirty=true; };
+  /* [ángulo, x, y, acercamiento] */
+  const ZONES={all:[0,0,-8,1],head:[25,0,322,4.6],hand:[0,92,-2,5.5],foot:[35,0,-328,4.2]};
+  $('zones').addEventListener('click',e=>{
+    const b=e.target.closest('[data-z]'); if(!b) return;
+    const [a,x,y,z]=ZONES[b.dataset.z];
+    turnTo(a); Object.assign(goal,{x,y,z}); mark(b.dataset.z);
+  });
+
+  function update(){
+    for(const m of marks){
+      const on=(!filter||m.p.mer===filter)&&matches(m.p);
+      m.dot.material.opacity=m.rim.material.opacity=on?1:.1;
+      m.rim.material.color.set(m.p.id===sel?0xff2a00:0x1b1815);
+      m.rim.scale.setScalar(m.p.id===sel?1.7:1.35);
+    }
+    for(const k in chans) chans[k].opacity=(!filter||filter===k)?.95:.07;
+    dirty=true;
+  }
+  /* gira el muñeco para mostrar el punto y se acerca a él */
+  function focus(id){
+    const m=marks.find(m=>m.p.id===id&&m.left); if(!m) return;
+    const n=m.n, p=m.dot.position;
+    turnTo(Math.hypot(n.x,n.z)>.25 ? Math.atan2(n.x,n.z)*180/Math.PI : 0);
+    const r=goal.a*Math.PI/180;
+    goal.x=p.x*Math.cos(r)-p.z*Math.sin(r);
+    goal.y=clamp(p.y,-355,345);
+    goal.z=(p.y>270||p.y<-300)?4.2:3;
+    mark(null); dirty=true;
+  }
+  /* para depurar */
+  window.__scene={marks,step,goal,cur,redraw(){ Object.assign(cur,goal); dirty=true; step(); }};
+  setTimeout(()=>{ build(); frame(); },30);
+  return {update,focus};
 }
 
 /* ---------- estado ---------- */
-let view='f', filter=null, sel=null, query='';
+let filter=null, sel=null, query='';
 const $ = id => document.getElementById(id);
 
 $('total').textContent = PTS.length;
@@ -294,16 +627,6 @@ $('chips').addEventListener('click',e=>{
   render();
 });
 
-$('bFront').onclick = ()=>setView('f');
-$('bBack').onclick  = ()=>setView('b');
-function setView(v){
-  view=v;
-  $('bFront').classList.toggle('on',v==='f');
-  $('bBack').classList.toggle('on',v==='b');
-  $('vn').textContent = v==='f' ? 'VISTA ANTERIOR' : 'VISTA POSTERIOR';
-  render();
-}
-
 $('q').addEventListener('input',e=>{ query=e.target.value.trim().toLowerCase(); render(); });
 
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
@@ -316,26 +639,7 @@ function matches(p){
 
 /* ---------- render ---------- */
 function render(){
-  $('silhouette').innerHTML = silhouette(view);
-  const vis = PTS.filter(p=>p.view===view);
-  let svg='';
-  for(const p of vis){
-    const active = (!filter || p.mer===filter) && matches(p);
-    const cls = 'pt' + (active?'':' dim') + (sel===p.id?' sel':'');
-    const r = sel===p.id ? 5.4 : 3.6;
-    const xs = p.mid ? [CX] : [CX-p.dx, CX+p.dx];
-    for(const x of xs){
-      svg += `<g class="${cls}" data-id="${p.id}">
-        <circle class="hit" cx="${x}" cy="${p.y}" r="13"/>
-        <circle class="vis" cx="${x}" cy="${p.y}" r="${r}" fill="${M[p.mer].c}"/>
-      </g>`;
-    }
-    if(sel===p.id){
-      const lx = p.mid ? CX+9 : CX+p.dx+9;
-      svg += `<text class="lbl" x="${lx}" y="${p.y-7}">${code(p)}</text>`;
-    }
-  }
-  $('points').innerHTML = svg;
+  scene3d.update();
 
   // lista
   const list = PTS.filter(p=>(!filter||p.mer===filter) && matches(p));
@@ -368,15 +672,16 @@ function render(){
   }
 }
 
-function pick(id){
-  const p = PTS[id];
-  if(p.view!==view) setView(p.view);
+function pick(id, turn){
   sel = id; render();
-  $('card').scrollIntoView({behavior:'smooth',block:'nearest'});
+  if(turn) scene3d.focus(id);
 }
-$('svg').addEventListener('click',e=>{ const g=e.target.closest('.pt'); if(g) pick(+g.dataset.id); });
-$('list').addEventListener('click',e=>{ const i=e.target.closest('.item'); if(i&&i.dataset.id) pick(+i.dataset.id); });
+$('list').addEventListener('click',e=>{
+  const i=e.target.closest('.item'); if(!i||!i.dataset.id) return;
+  pick(+i.dataset.id,true); $('stage').scrollIntoView({behavior:'smooth',block:'nearest'});
+});
 
+const scene3d = createScene();
 render();
 </script>
 </body>
