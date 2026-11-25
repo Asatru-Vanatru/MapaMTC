@@ -99,6 +99,7 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
   <div class="list" id="list"></div>
 
   <footer>
+    Cuerpo 3D basado en la malla de <a href="https://github.com/makehumancommunity/makehuman" style="color:inherit">MakeHuman</a> (CC0).<br>
     <strong>Material educativo.</strong> No reemplaza la consulta, el diagnóstico ni el tratamiento
     de un profesional de la salud. La punción y la moxa requieren formación.<br>
     Las posiciones son esquemáticas y orientativas: sirven para ubicar el canal,
@@ -107,6 +108,7 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="modelo.js"></script>
 <script>
 /* ---------- canales ---------- */
 const M = {
@@ -239,177 +241,267 @@ const PTS = RAW.map((r,i)=>({id:i,mer:r[0],num:r[1],hz:r[2],py:r[3],es:r[4],view
 const code = p => p.mer + p.num;
 
 /* ---------- muñeco 3D ----------
-   Coordenadas del modelo: x lateral, y hacia abajo (0 = coronilla), z hacia el frente.
-   Se modela un lado (x>0, el izquierdo del muñeco) y se refleja. */
+   Cuerpo: malla base de MakeHuman (modelo.js, CC0).
+   Coordenadas: x lateral, y hacia abajo, z hacia el frente. x>0 es el lado izquierdo del muñeco. */
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
-function smin(a,b,k){ const h=clamp(.5+.5*(b-a)/k,0,1); return b+(a-b)*h-k*h*(1-h); }
-/* cono redondeado entre a y b; kz aplana en z, ky en y */
-function cone(x,y,z,a,b,ra,rb,kz=1,ky=1){
-  const dx=b[0]-a[0], dy=(b[1]-a[1])/ky, dz=(b[2]-a[2])/kz;
-  const px=x-a[0], py=(y-a[1])/ky, pz=(z-a[2])/kz;
-  const t=clamp((px*dx+py*dy+pz*dz)/(dx*dx+dy*dy+dz*dz),0,1);
-  return (Math.hypot(px-dx*t,py-dy*t,pz-dz*t)-(ra+(rb-ra)*t))*Math.min(kz,ky);
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const subv=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const unit=a=>mul(a,1/(Math.hypot(...a)||1));
+const lerp=(a,b,t)=>add(a,mul(subv(b,a),t));
+const ortho=(v,u)=>unit(subv(v,mul(u,dot3(v,u))));
+/* ----- postura de muñeco -----
+   Los puntos se ubican sobre la malla original (brazos abiertos) y después cuerpo,
+   puntos y líneas pasan por la misma deformación, así siguen sobre la piel. */
+const ARM_DOWN=35, FOREARM_BACK=36, LEG_IN=4.6; /* grados */
+const ramp=(a,b,v)=>{ const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
+function segDist(p,a,b){
+  const ab=subv(b,a), t=clamp(dot3(subv(p,a),ab)/dot3(ab,ab),0,1);
+  return Math.hypot(...subv(p,add(a,mul(ab,t))));
 }
-function ellipsoid(x,y,z,cx,cy,cz,rx,ry,rz){
-  const a=(x-cx)/rx, b=(y-cy)/ry, c=(z-cz)/rz;
-  return (Math.sqrt(a*a+b*b+c*c)-1)*Math.min(rx,ry,rz);
+function pose(point){
+  const side=point[0]<0?-1:1, p=[Math.abs(point[0]),point[1],point[2]];
+  const S=J('shoulder'), E=J('elbow'), W=J('hand'), tip=J('finger-3-4');
+  let q=p.slice();
+  /* brazo: peso según avance sobre el eje y cercanía a él */
+  const along=dot3(subv(p,S),unit(subv(E,S)));
+  const near=Math.min(segDist(p,S,E),segDist(p,E,W),segDist(p,W,tip)-14);
+  const arm=ramp(-20,34,along)*(1-ramp(34,52,near));
+  if(arm>0){
+    const turn=(v,o,deg)=>{ /* baja el brazo en el plano frontal */
+      const r=deg*Math.PI/180, dx=v[0]-o[0], dy=v[1]-o[1];
+      return [o[0]+dx*Math.cos(r)-dy*Math.sin(r), o[1]+dx*Math.sin(r)+dy*Math.cos(r), v[2]];
+    };
+    q=turn(p,S,ARM_DOWN*arm);
+    const fore=ramp(-16,26,dot3(subv(p,E),unit(subv(W,E))))*arm;
+    if(fore>0){ /* lleva el antebrazo hacia atrás en el plano lateral */
+      const o=turn(E,S,ARM_DOWN*arm), r=FOREARM_BACK*fore*Math.PI/180, dy=q[1]-o[1], dz=q[2]-o[2];
+      q=[q[0], o[1]+dy*Math.cos(r)+dz*Math.sin(r), o[2]-dy*Math.sin(r)+dz*Math.cos(r)];
+    }
+  }
+  /* piernas: se desplazan hacia el centro sin inclinar los pies */
+  const hip=J('upper-leg'), ankle=J('ankle');
+  if(p[1]>hip[1]-10){
+    const drop=Math.min(p[1],ankle[1])-hip[1];
+    q[0]-=Math.max(0,drop)*Math.tan(LEG_IN*Math.PI/180)*ramp(0,22,p[0]+(p[1]>420?22:0))*(1-arm);
+  }
+  return [q[0]*side,q[1],q[2]];
 }
-/* tronco: [y, semiancho, semifondo, centro z] */
-const TRUNK=[[112,15,15,-3],[124,24,18,-3],[133,43,21,-2],[145,52,25,-1],[165,50,31,1],[185,45,31,1],
- [210,40,27,0],[240,36,24,0],[262,36,24,0],[290,42,27,-1],[312,46,29,-2],[330,43,27,-2],[346,24,18,-2]];
-function torso(x,y,z){
-  let i=0; while(i<TRUNK.length-2 && y>TRUNK[i+1][0]) i++;
-  const p=TRUNK[i], q=TRUNK[i+1], t=clamp((y-p[0])/(q[0]-p[0]),0,1);
-  const a=p[1]+(q[1]-p[1])*t, b=p[2]+(q[2]-p[2])*t, c=p[3]+(q[3]-p[3])*t;
-  const d=(Math.sqrt((x/a)**2+((z-c)/b)**2)-1)*Math.min(a,b);
-  const e=Math.max(TRUNK[0][0]-y, y-TRUNK[TRUNK.length-1][0]);
-  return Math.min(Math.max(d,e),0)+Math.hypot(Math.max(d,0),Math.max(e,0));
-}
-function sdTrunk(x,y,z){
-  x=Math.abs(x);
-  let d=torso(x,y,z);
-  d=smin(d,cone(x,y,z,[0,88,-4],[0,128,-4],19,19),7);
-  let h=ellipsoid(x,y,z,0,52,0,32,42,36);
-  h=smin(h,ellipsoid(x,y,z,0,73,9,23,23,26),9);
-  h=smin(h,cone(x,y,z,[0,52,35],[0,66,39],2,4),3);
-  h=smin(h,ellipsoid(x,y,z,32,60,-3,4,11,7),2);
-  d=smin(d,h,6);
-  return smin(d,cone(x,y,z,[26,141,-3],[52,148,-2],14,16),10);
-}
-function sdArm(x,y,z){
-  x=Math.abs(x);
-  let d=cone(x,y,z,[56,148,-2],[73,262,-3],16.5,11.5);
-  d=smin(d,cone(x,y,z,[73,262,-3],[77,290,-1],11.5,13),4);
-  d=smin(d,cone(x,y,z,[77,290,-1],[89,357,0],13,7.5,.85),4);
-  let h=cone(x,y,z,[89.5,362,0],[91,383,0],10.5,11,.46);
-  [[83,401],[89,408],[95,410],[101,404]].forEach((f,i)=>{
-    h=smin(h,cone(x,y,z,[84+i*4.9,383,0],[f[0],f[1],0],3,2.5),1);
+const flip = p => [p[0], 385-p[1], p[2]-18];
+const world = p => flip(pose(p));
+
+/* un paso de subdivisión Catmull-Clark: suaviza la malla de cuadrados */
+function subdivide(v,quads){
+  const out=v.map(p=>p.slice()), edges=new Map(), n=v.length;
+  const facePts=quads.map(q=>mul(q.reduce((s,i)=>add(s,v[i]),[0,0,0]),.25));
+  const acc=Array.from({length:n},()=>({f:[0,0,0],nf:0,r:[0,0,0],ne:0,b:[0,0,0],nb:0}));
+  quads.forEach((q,fi)=>q.forEach((a,k)=>{
+    const b=q[(k+1)%4], key=a<b?a+'_'+b:b+'_'+a;
+    if(!edges.has(key)) edges.set(key,{a,b,faces:[]});
+    edges.get(key).faces.push(fi);
+    acc[a].f=add(acc[a].f,facePts[fi]); acc[a].nf++;
+  }));
+  for(const e of edges.values()){
+    const mid=lerp(v[e.a],v[e.b],.5), open=e.faces.length<2;
+    for(const i of [e.a,e.b]){
+      acc[i].r=add(acc[i].r,mid); acc[i].ne++;
+      if(open){ acc[i].b=add(acc[i].b,mid); acc[i].nb++; }
+    }
+    e.id=out.length;
+    out.push(open?mid:lerp(mid,lerp(facePts[e.faces[0]],facePts[e.faces[1]],.5),.5));
+  }
+  acc.forEach((s,i)=>{
+    if(s.nb) out[i]=add(mul(v[i],.5),mul(s.b,.5/s.nb));
+    else if(s.nf) out[i]=mul(add(add(mul(s.f,1/s.nf),mul(s.r,2/s.ne)),mul(v[i],s.nf-3)),1/s.nf);
   });
-  h=smin(h,cone(x,y,z,[96,366,1],[109,390,3],5,3),3);
-  return smin(d,h,4);
-}
-function sdLeg(x,y,z){
-  x=Math.abs(x);
-  let d=cone(x,y,z,[23,322,-1],[25,500,0],22.5,14.5);
-  d=smin(d,cone(x,y,z,[25,500,0],[28,552,-4],14.5,17),7);
-  d=smin(d,cone(x,y,z,[28,552,-4],[27,694,-3],17,8),7);
-  d=smin(d,ellipsoid(x,y,z,25,494,10,9,12,7),4);
-  d=smin(d,cone(x,y,z,[27,704,-4],[29,722,-6],8.5,11),6);
-  d=smin(d,cone(x,y,z,[28,721,-6],[30,724,26],12,11,1,.72),5);
-  [[22,46,4],[28,45,3],[32.5,43,2.8],[36.5,41,2.7],[40,38,2.6]].forEach(t=>{
-    d=smin(d,cone(x,y,z,[t[0],727,25],[t[0],727,t[1]],t[2],t[2]),1.4);
-  });
-  return d;
-}
-/* cajas para no evaluar partes lejanas */
-function sdBody(x,y,z){
-  const ax=Math.abs(x);
-  let d=40;
-  if(y<362 && ax<80) d=sdTrunk(x,y,z);
-  if(y>120 && y<425 && ax>20) d=smin(d,sdArm(x,y,z),7);
-  if(y>290 && ax<62) d=smin(d,sdLeg(x,y,z),y<370?9:.8);
-  return d;
-}
-const SDF={T:sdTrunk,A:sdArm,L:sdLeg};
-const world = p => [p[0], 385-p[1], p[2]];
-function grad(x,y,z){
-  const e=.6;
-  const g=[sdBody(x+e,y,z)-sdBody(x-e,y,z), sdBody(x,y+e,z)-sdBody(x,y-e,z), sdBody(x,y,z+e)-sdBody(x,y,z-e)];
-  const l=Math.hypot(...g)||1; return g.map(v=>v/l);
+  const faceIds=facePts.map(p=>out.push(p)-1), tris=[];
+  const edge=(a,b)=>edges.get(a<b?a+'_'+b:b+'_'+a).id;
+  quads.forEach((q,fi)=>q.forEach((a,k)=>{
+    const e1=edge(a,q[(k+1)%4]), e0=edge(q[(k+3)%4],a), c=faceIds[fi];
+    tris.push([a,e1,c],[a,c,e0]);
+  }));
+  return {v:out,tris};
 }
 
-/* surface nets: convierte el campo de distancias en una malla lisa */
-function buildMesh(step){
-  const x0=-124,y0=0,z0=-54, nx=Math.ceil(248/step)+1, ny=Math.ceil(744/step)+1, nz=Math.ceil(114/step)+1;
-  const f=new Float32Array(nx*ny*nz), id=(i,j,k)=>i+nx*(j+ny*k);
-  for(let k=0;k<nz;k++) for(let j=0;j<ny;j++) for(let i=0;i<nx;i++)
-    f[id(i,j,k)]=sdBody(x0+i*step,y0+j*step,z0+k*step);
-  const vid=new Int32Array(nx*ny*nz).fill(-1), pos=[], nor=[], idx=[];
-  for(let k=0;k<nz-1;k++) for(let j=0;j<ny-1;j++) for(let i=0;i<nx-1;i++){
-    let sx=0,sy=0,sz=0,n=0;
-    for(let c=0;c<8;c++) for(const bit of [1,2,4]){
-      if(c&bit) continue;
-      const o=c|bit;
-      const a=f[id(i+(c&1),j+(c>>1&1),k+(c>>2&1))], b=f[id(i+(o&1),j+(o>>1&1),k+(o>>2&1))];
-      if((a<0)===(b<0)) continue;
-      const t=a/(a-b);
-      sx+=(c&1)+((o&1)-(c&1))*t; sy+=(c>>1&1)+((o>>1&1)-(c>>1&1))*t; sz+=(c>>2&1)+((o>>2&1)-(c>>2&1))*t; n++;
+let mesh=null;
+function getMesh(){
+  if(mesh) return mesh;
+  const v=[], quads=[];
+  for(let i=0;i<MALLA.v.length;i+=3) v.push(MALLA.v.slice(i,i+3));
+  for(let i=0;i<MALLA.f.length;i+=4) quads.push(MALLA.f.slice(i,i+4));
+  const m=subdivide(v,quads);
+  /* normales suaves (y hacia abajo invierte la orientación) */
+  const nor=m.v.map(()=>[0,0,0]);
+  for(const [a,b,c] of m.tris){
+    const n=cross(subv(m.v[c],m.v[a]),subv(m.v[b],m.v[a]));
+    for(const i of [a,b,c]) nor[i]=add(nor[i],n);
+  }
+  m.nor=nor.map(unit);
+  /* rejilla para buscar triángulos cercanos */
+  m.grid=new Map();
+  m.tris.forEach((t,ti)=>{
+    const c=[0,1,2].map(k=>(m.v[t[0]][k]+m.v[t[1]][k]+m.v[t[2]][k])/3);
+    const key=c.map(x=>Math.floor(x/14)).join();
+    if(!m.grid.has(key)) m.grid.set(key,[]);
+    m.grid.get(key).push(ti);
+  });
+  return mesh=m;
+}
+
+/* primer cruce del rayo con la piel */
+function cast(o,d){
+  const m=getMesh(); let best=Infinity, hit=null;
+  for(const t of m.tris){
+    const a=m.v[t[0]], e1=subv(m.v[t[1]],a), e2=subv(m.v[t[2]],a);
+    const p=cross(d,e2), det=dot3(e1,p);
+    if(Math.abs(det)<1e-9) continue;
+    const s=subv(o,a), u=dot3(s,p)/det;
+    if(u<-1e-6||u>1+1e-6) continue;
+    const q=cross(s,e1), w=dot3(d,q)/det;
+    if(w<-1e-6||u+w>1+1e-6) continue;
+    const dist=dot3(e2,q)/det;
+    if(dist>1e-4 && dist<best){ best=dist; hit=t; }
+  }
+  if(!hit) return null;
+  const p=add(o,mul(d,best));
+  const n=unit(hit.reduce((s,i)=>add(s,m.nor[i]),[0,0,0]));
+  return {p,n};
+}
+/* punto más cercano de un triángulo, como pesos de sus vértices */
+function closest(p,a,b,c){
+  const ab=subv(b,a), ac=subv(c,a), ap=subv(p,a), d1=dot3(ab,ap), d2=dot3(ac,ap);
+  if(d1<=0&&d2<=0) return [1,0,0];
+  const bp=subv(p,b), d3=dot3(ab,bp), d4=dot3(ac,bp);
+  if(d3>=0&&d4<=d3) return [0,1,0];
+  const vc=d1*d4-d3*d2;
+  if(vc<=0&&d1>=0&&d3<=0){ const t=d1/(d1-d3); return [1-t,t,0]; }
+  const cp=subv(p,c), d5=dot3(ab,cp), d6=dot3(ac,cp);
+  if(d6>=0&&d5<=d6) return [0,0,1];
+  const vb=d5*d2-d1*d6;
+  if(vb<=0&&d2>=0&&d6<=0){ const t=d2/(d2-d6); return [1-t,0,t]; }
+  const va=d3*d6-d5*d4;
+  if(va<=0&&d4-d3>=0&&d5-d6>=0){ const t=(d4-d3)/((d4-d3)+(d5-d6)); return [0,1-t,t]; }
+  const k=1/(va+vb+vc); return [1-(vb+vc)*k, vb*k, vc*k];
+}
+/* lleva un punto a la piel, separado "lift" unidades */
+function snap(p,lift){
+  const m=getMesh(), c=p.map(x=>Math.floor(x/14));
+  let best=Infinity, res=null;
+  for(let r=1;r<=8;r++){
+    for(let i=-r;i<=r;i++) for(let j=-r;j<=r;j++) for(let k=-r;k<=r;k++){
+      if(r>1 && Math.max(Math.abs(i),Math.abs(j),Math.abs(k))<r) continue;
+      for(const ti of m.grid.get((c[0]+i)+','+(c[1]+j)+','+(c[2]+k))||[]){
+        const t=m.tris[ti], A=m.v[t[0]], B=m.v[t[1]], C=m.v[t[2]];
+        const w=closest(p,A,B,C), q=add(add(mul(A,w[0]),mul(B,w[1])),mul(C,w[2]));
+        const dist=Math.hypot(...subv(p,q));
+        if(dist<best){ best=dist; res={q,n:unit(add(add(mul(m.nor[t[0]],w[0]),mul(m.nor[t[1]],w[1])),mul(m.nor[t[2]],w[2])))}; }
+      }
     }
-    if(!n) continue;
-    const x=x0+(i+sx/n)*step, y=y0+(j+sy/n)*step, z=z0+(k+sz/n)*step;
-    vid[id(i,j,k)]=pos.length/3;
-    pos.push(...world([x,y,z]));
-    const g=grad(x,y,z); nor.push(g[0],-g[1],g[2]);
+    if(res && best<(r-1)*14+4) break;
   }
-  const quad=(out,a,b,c,d)=>{ if(a<0||b<0||c<0||d<0) return; if(out) idx.push(a,c,b,a,d,c); else idx.push(a,b,c,a,c,d); };
-  for(let k=1;k<nz-1;k++) for(let j=1;j<ny-1;j++) for(let i=1;i<nx-1;i++){
-    const v=f[id(i,j,k)]<0;
-    if(v!==(f[id(i+1,j,k)]<0)) quad(v,vid[id(i,j-1,k-1)],vid[id(i,j,k-1)],vid[id(i,j,k)],vid[id(i,j-1,k)]);
-    if(v!==(f[id(i,j+1,k)]<0)) quad(v,vid[id(i-1,j,k-1)],vid[id(i-1,j,k)],vid[id(i,j,k)],vid[id(i,j,k-1)]);
-    if(v!==(f[id(i,j,k+1)]<0)) quad(v,vid[id(i-1,j-1,k)],vid[id(i,j-1,k)],vid[id(i,j,k)],vid[id(i-1,j,k)]);
-  }
-  return {pos,nor,idx};
+  return {p:add(res.q,mul(res.n,lift)), n:res.n};
 }
 
 /* ---------- ubicación esquemática de cada punto ----------
-   F/B x y : en (x,y) hacia el frente / dorso
-   T/A/L y ángulo : tronco-cabeza, brazo, pierna (0 frente, 90 lateral, 180 dorso, -90 medial)
-   R x y z dx dy dz : rayo libre (manos y pies) */
-const AXIS={T:[[0,0,0],[0,360,0]], A:[[56,140,-2],[73,262,-3],[77,290,-1],[89,357,0],[90,430,0]],
-  L:[[23,310,-1],[25,500,0],[28,552,-4],[27,694,-3],[28,712,-5]]};
+   F/B x y      : a x de la línea media y altura y, hacia el frente / dorso
+   T y ángulo   : cabeza y tronco (0 frente, 90 costado, 180 dorso)
+   U/W t ángulo : brazo y antebrazo, t de 0 a 1 (0 frente, 90 lateral, 180 dorso, -90 medial)
+   M u r lado   : mano, u de muñeca a nudillos, r hacia el pulgar; lado 1 palma, -1 dorso
+   N dedo lado  : borde de la uña, dedo 1 pulgar a 5 meñique; lado 1 hacia el pulgar, -1 contrario, 0 yema
+   L y ángulo   : pierna
+   R x y z dx dy dz : rayo libre (pies y coronilla) */
+const J=k=>MALLA.j[k.startsWith('head')||k==='neck'?k:'l-'+k];
+function handFrame(){
+  const w=J('hand'), a=unit(subv(J('finger-3-1'),w));
+  const r=ortho(subv(J('finger-2-1'),J('finger-5-1')),a);
+  let p=unit(cross(a,r)); if(dot3(p,[-1,1,0])<0) p=mul(p,-1);
+  return {w,a,r,p};
+}
+function ray(spec){
+  const s=spec.split(' '), t=s[0], n=s.slice(1).map(Number);
+  const zc=y=>y<115?20:y<150?6:y<250?16:y<330?22:14;
+  /* en la cara hay cavidades (boca, oídos): allí el rayo entra desde afuera */
+  const inward=([o,d])=>[add(o,mul(d,120)),mul(d,-1)];
+  if(t==='F'||t==='B'){
+    const r=[[n[0],n[1],zc(n[1])],[0,0,t==='F'?1:-1]];
+    return n[1]<105?inward(r):r;
+  }
+  if(t==='R') return [n.slice(0,3),unit(n.slice(3))];
+  const rad=n[1]*Math.PI/180;
+  const around=(o,front,lat)=>[o,unit(add(mul(front,Math.cos(rad)),mul(lat,Math.sin(rad))))];
+  if(t==='T'){
+    const r=around([0,n[0],zc(n[0])],[0,0,1],[1,0,0]);
+    return n[0]<105?inward(r):r;
+  }
+  if(t==='L'){
+    const y=n[0], hip=J('upper-leg'), knee=J('knee'), ankle=J('ankle');
+    const o = y<knee[1] ? lerp(hip,knee,(y-hip[1])/(knee[1]-hip[1])) : lerp(knee,ankle,(y-knee[1])/(ankle[1]-knee[1]));
+    /* la pantorrilla queda detrás del eje de las articulaciones */
+    if(y>knee[1]) o[2]-=6*Math.sin(Math.PI*clamp((y-knee[1])/(ankle[1]-knee[1]),0,1));
+    return around(o,[0,0,1],[1,0,0]);
+  }
+  if(t==='U'||t==='W'){
+    const A=J(t==='U'?'shoulder':'elbow'), B=J(t==='U'?'elbow':'hand'), u=unit(subv(B,A));
+    let front=ortho([0,0,1],u), lat=ortho([1,-1,0],u);
+    if(t==='W'){
+      const h=handFrame();
+      front=ortho(lerp(front,h.p,n[0]),u); lat=ortho(lerp(lat,h.r,n[0]),u);
+    }
+    return around(lerp(A,B,n[0]),front,lat);
+  }
+  const h=handFrame();
+  if(t==='M'){
+    const len=Math.hypot(...subv(J('finger-3-1'),h.w));
+    return [add(add(h.w,mul(h.a,n[0]*len)),mul(h.r,n[1])), mul(h.p,n[2])];
+  }
+  /* N: uñas */
+  const tip=J('finger-'+n[0]+'-4'), prev=J('finger-'+n[0]+'-3'), along=unit(subv(tip,prev));
+  const o=lerp(prev,tip,.62);
+  if(n[1]===0) return [o,along];
+  return [o, mul(ortho(h.r,along),n[1])];
+}
+const cache={};
+function surface(spec){
+  if(cache[spec]) return cache[spec];
+  const [o,d]=ray(spec), hit=cast(o,d);
+  if(!hit){ console.warn('sin superficie',spec); return cache[spec]=snap(o,.9); }
+  return cache[spec]={p:add(hit.p,mul(hit.n,.9)), n:hit.n};
+}
 const POS={
-P1:'F 37 150',P5:'A 262 28',P7:'A 343 62',P9:'F 94 358',P11:'R 107 388 3 1 0 0',
-IG1:'R 100.6 402 0 1 0 0',IG4:'B 99 373',IG10:'A 284 112',IG11:'A 259 100',IG15:'A 150 62',IG20:'F 7 68',
-E1:'F 13 59',E4:'F 12 79',E6:'T 83 55',E7:'T 67 68',E25:'F 13 266',E34:'L 470 30',E36:'L 530 28',E40:'L 590 40',E44:'R 31 724 27 0 -1 0',
-BP1:'R 22 727 42 -1 0 0',BP3:'R 27 724 24 -1 0 0',BP4:'R 28 723 13 -1 0 0',BP6:'L 645 -95',BP9:'L 520 -88',BP10:'L 470 -42',BP21:'T 200 90',
-C1:'A 175 -62',C3:'A 264 -65',C5:'A 342 -55',C6:'A 350 -55',C7:'F 84 358',C9:'R 83.2 399 0 1 0 0',
-ID3:'R 87 383 0 -1 0 0',ID6:'A 347 218',ID9:'B 47 170',ID11:'B 29 170',ID18:'F 20 68',ID19:'T 63 84',
-V1:'F 6 53',V2:'F 8 47',V10:'B 8 92',V13:'B 13 155',V15:'B 13 177',V18:'B 13 212',V20:'B 13 233',V23:'B 13 259',V25:'B 13 285',
-V40:'L 500 180',V57:'L 592 180',V60:'L 692 128',V62:'L 702 95',V67:'R 40 727 36 1 0 0',
-R1:'R 29 723 17 0 1 0',R3:'L 690 -122',R6:'L 701 -92',R7:'L 662 -125',R10:'L 500 -138',R27:'F 12 137',
-PC3:'A 262 -12',PC6:'A 334 0',PC7:'F 89 358',PC8:'F 92 376',PC9:'R 95 405 0 0 1 0',
-TR1:'R 88.7 404 0 -1 0 0',TR3:'B 87 379',TR4:'B 89 357',TR5:'A 334 180',TR14:'A 155 135',TR17:'T 74 104',TR21:'T 57 82',TR23:'F 22 46',
-VB2:'T 70 83',VB14:'F 13 34',VB20:'B 16 88',VB21:'R 31 142 -3 0 -1 0',VB30:'T 322 138',VB31:'L 432 90',VB34:'L 522 68',VB39:'L 652 78',VB40:'L 700 52',VB41:'R 35 724 20 0 -1 0',
-H1:'R 22 727 42 1 0 0',H2:'R 25.5 726 31 0 -1 0',H3:'R 26 724 20 0 -1 0',H8:'L 495 -102',H13:'T 242 68',H14:'F 26 198',
-RM3:'F 0 307',RM4:'F 0 293',RM6:'F 0 279',RM8:'F 0 264',RM12:'F 0 232',RM17:'F 0 177',RM22:'F 0 127',RM24:'F 0 86',
-DM1:'B 0 336',DM3:'B 0 285',DM4:'B 0 259',DM14:'B 0 126',DM16:'B 0 88',DM20:'R 0 50 0 0 -1 0',DM26:'F 0 74'
+P1:'F 56 164',P5:'W 0.04 28',P7:'W 0.84 75',P9:'W 0.98 45',P11:'N 1 1',
+IG1:'N 2 1',IG4:'M 0.7 12 -1',IG10:'W 0.18 115',IG11:'W 0.02 100',IG15:'U 0.07 70',IG20:'F 11 71',
+E1:'F 14 59',E4:'F 14 83',E6:'T 85 52',E7:'T 66 68',E25:'F 24 292',E34:'L 508 28',E36:'L 574 28',E40:'L 622 38',E44:'R 85 727 62 0 -1 0',
+BP1:'R 70 729 78 -1 0 0',BP3:'R 71 727 56 -1 0 0',BP4:'R 72 723 40 -1 0 0',BP6:'L 668 -100',BP9:'L 564 -88',BP10:'L 508 -40',BP21:'T 214 90',
+C1:'U 0.22 -75',C3:'W 0.03 -65',C5:'W 0.9 -42',C6:'W 0.95 -42',C7:'W 0.99 -42',C9:'N 5 1',
+ID3:'M 0.88 -13 -1',ID6:'W 0.92 218',ID9:'B 58 178',ID11:'B 46 176',ID18:'F 25 71',ID19:'T 64 86',
+V1:'F 7 53',V2:'F 9 46',V10:'B 11 94',V13:'B 18 158',V15:'B 18 178',V18:'B 18 214',V20:'B 18 234',V23:'B 18 262',V25:'B 18 288',
+V40:'L 538 180',V57:'L 624 180',V60:'L 702 125',V62:'L 713 95',V67:'R 98 728 65 1 0 0',
+R1:'R 82 726 40 0 1 0',R3:'L 700 -122',R6:'L 712 -95',R7:'L 676 -128',R10:'L 538 -135',R27:'F 22 156',
+PC3:'W 0.03 -10',PC6:'W 0.8 0',PC7:'W 0.98 0',PC8:'M 0.62 2 1',PC9:'N 3 0',
+TR1:'N 4 -1',TR3:'M 0.85 -7 -1',TR4:'W 0.99 180',TR5:'W 0.8 180',TR14:'U 0.1 135',TR17:'T 77 104',TR21:'T 58 84',TR23:'F 24 47',
+VB2:'T 71 85',VB14:'F 17 32',VB20:'B 18 98',VB21:'R 46 160 7 0 -1 0',VB30:'T 350 135',VB31:'L 455 90',VB34:'L 566 70',VB39:'L 668 82',VB40:'L 706 55',VB41:'R 91 727 43 0 -1 0',
+H1:'R 70 729 78 1 0 0',H2:'R 78 727 63 0 -1 0',H3:'R 77 724 49 0 -1 0',H8:'L 534 -100',H13:'T 256 70',H14:'F 43 214',
+RM3:'F 0.5 343',RM4:'F 0.5 328',RM6:'F 0.5 310',RM8:'F 0.5 292',RM12:'F 0.5 254',RM17:'F 0.5 198',RM22:'F 0.5 142',RM24:'F 0.5 91',
+DM1:'T 368 180',DM3:'B 0.5 288',DM4:'B 0.5 262',DM14:'B 0.5 132',DM16:'B 0.5 94',DM20:'R 0.5 45 6 0 -1 0',DM26:'F 0.5 76'
 };
 /* puntos de paso para que las líneas sigan el cuerpo */
 const VIA={
-P1:['A 175 35','A 215 35'],
-IG4:['A 320 100'],IG11:['A 200 90'],IG15:['T 108 60'],
-E7:['T 108 30','F 20 150','F 22 200'],E25:['F 17 310','L 380 25'],E40:['L 650 25','L 700 12'],
-BP10:['L 400 -40','F 22 305','F 30 240'],
-C1:['A 215 -65'],
-ID6:['A 300 225','A 220 205'],
-V2:['F 7 30','R 7 40 0 0 -1 0','B 8 50'],V25:['B 18 330','L 400 180'],V57:['L 650 160'],
-R10:['L 420 -120','F 5 315','F 9 230','F 11 175'],
-PC3:['A 205 -5'],
-TR5:['A 262 180','A 200 150'],TR14:['T 112 105'],
-VB30:['L 380 95'],
-H8:['L 400 -75','F 14 320'],
-DM4:['B 0 190'],DM20:['R 0 50 0 0 -.6 .8','F 0 30']
+P1:['U 0.15 40','U 0.55 28'],
+IG4:['W 0.7 105','W 0.45 112'],IG11:['U 0.6 100'],IG15:['T 116 60'],
+E7:['T 112 28','F 36 165','F 40 210','F 28 250'],E25:['F 26 338','L 420 22'],E40:['L 690 25','L 712 20'],
+BP10:['L 440 -40','F 40 340','F 48 270','F 56 205'],
+C1:['U 0.6 -68'],
+ID6:['W 0.5 225','W 0.12 225','U 0.5 215'],
+V2:['F 10 28','R 10 45 6 0 -1 -0.1','B 11 52'],V25:['B 24 345','L 440 180'],V57:['L 680 160'],
+R10:['L 450 -125','F 8 340','F 14 260','F 20 205'],
+PC3:[],
+TR5:['W 0.4 180','U 0.9 180','U 0.5 150'],TR14:['T 118 105'],
+VB30:['L 400 95'],
+H8:['L 440 -75','F 34 340'],
+DM4:['B 0.5 200'],DM20:['R 0.5 45 6 0 -0.6 0.8','F 0.5 28']
 };
-function surface(spec){
-  const a=spec.split(' '), t=a[0], n=a.slice(1).map(Number);
-  let o,d,f=sdBody;
-  if(t==='F'||t==='B'){ o=[n[0],n[1],-2]; d=[0,0,t==='F'?1:-1]; }
-  else if(t==='R'){ o=n.slice(0,3); d=n.slice(3); }
-  else {
-    const ax=AXIS[t]; let i=0; while(i<ax.length-2 && n[0]>ax[i+1][1]) i++;
-    const p=ax[i], q=ax[i+1], u=(n[0]-p[1])/(q[1]-p[1]), r=n[1]*Math.PI/180;
-    o=[p[0]+(q[0]-p[0])*u, n[0], p[2]+(q[2]-p[2])*u]; d=[Math.sin(r),0,Math.cos(r)]; f=SDF[t];
-  }
-  const at=s=>[o[0]+d[0]*s,o[1]+d[1]*s,o[2]+d[2]*s];
-  let s=0; while(s<90 && f(...at(s))<0) s+=.4;
-  return snap(at(s),.6);
-}
-/* lleva un punto a la superficie, separado "lift" unidades */
-function snap(p,lift){
-  let q=p.slice();
-  for(let i=0;i<5;i++){ const d=sdBody(...q)-lift, g=grad(...q); q=q.map((v,j)=>v-g[j]*d); }
-  return q;
-}
 
 function createScene(){
   const stage=$('stage'), none={update(){},focus(){}};
@@ -432,21 +524,29 @@ function createScene(){
   const dotGeo=new THREE.SphereGeometry(1,12,10);
 
   function build(){
-    const m=buildMesh(2.1), g=new THREE.BufferGeometry();
-    g.setAttribute('position',new THREE.Float32BufferAttribute(m.pos,3));
-    g.setAttribute('normal',new THREE.Float32BufferAttribute(m.nor,3));
-    g.setIndex(m.idx);
-    body=new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:0xeadcc0,specular:0x1c1c1c,shininess:30}));
+    const m=getMesh(), g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(m.v.flatMap(world),3));
+    g.setIndex(m.tris.flat());
+    g.computeVertexNormals();
+    const ivory=new THREE.MeshPhongMaterial({color:0xeadcc0,specular:0x1c1c1c,shininess:30,side:THREE.DoubleSide});
+    body=new THREE.Mesh(g,ivory);
     model.add(body);
-    const base=new THREE.Mesh(new THREE.CylinderGeometry(92,98,20,64),new THREE.MeshPhongMaterial({color:0xfaf8f4,shininess:60}));
-    base.position.y=385-743; model.add(base);
+    /* la malla base trae las cuencas abiertas: se cierran con dos esferas */
+    for(const k of ['l-eye','r-eye']){
+      const eye=new THREE.Mesh(new THREE.SphereGeometry(5.6,24,16),ivory);
+      eye.position.set(...world(MALLA.j[k])); model.add(eye);
+    }
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(98,106,20,72),new THREE.MeshPhongMaterial({color:0xfaf8f4,shininess:60}));
+    base.position.y=385-746; model.add(base);
 
     for(const p of PTS){
       const at=surface(POS[code(p)]);
-      for(const q of (p.mid?[at]:[at,mirror(at)])){
+      for(const side of (p.mid?[1]:[1,-1])){
+        const q=[at.p[0]*side,at.p[1],at.p[2]], o=[at.n[0]*side,at.n[1],at.n[2]];
+        /* normal después de la deformación */
+        const n=unit(subv(pose(add(q,o)),pose(q)));
         const dot=new THREE.Mesh(dotGeo,new THREE.MeshBasicMaterial({color:M[p.mer].c,transparent:true}));
         dot.position.copy(V(q));
-        const n=grad(...q);
         const rim=new THREE.Mesh(dotGeo,new THREE.MeshBasicMaterial({color:0x1b1815,side:THREE.BackSide,transparent:true}));
         rim.scale.setScalar(1.35); dot.add(rim);
         model.add(dot);
@@ -458,13 +558,13 @@ function createScene(){
       chans[k]=mat;
       const route=[];
       PTS.filter(p=>p.mer===k).forEach(p=>{
-        route.push(surface(POS[code(p)]));
-        (VIA[code(p)]||[]).forEach(v=>route.push(surface(v)));
+        route.push(surface(POS[code(p)]).p);
+        (VIA[code(p)]||[]).forEach(v=>route.push(surface(v).p));
       });
       const pts=[];
       for(let i=0;i<route.length-1;i++){
-        const a=route[i], b=route[i+1], n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])/4));
-        for(let j=0;j<n;j++) pts.push(snap(a.map((v,c)=>v+(b[c]-v)*j/n),.7));
+        const a=route[i], b=route[i+1], n=Math.max(1,Math.ceil(Math.hypot(...subv(b,a))/5));
+        for(let j=0;j<n;j++) pts.push(j?snap(lerp(a,b,j/n),.8).p:a);
       }
       pts.push(route[route.length-1]);
       const mid=k==='RM'||k==='DM';
@@ -487,7 +587,7 @@ function createScene(){
   }
   new ResizeObserver(resize).observe(stage); resize();
   const half=()=>Math.tan(camera.fov*Math.PI/360);
-  const fitDist=()=>Math.max(810/2, 290/2/camera.aspect)/half();
+  const fitDist=()=>Math.max(810/2, 300/2/camera.aspect)/half();
   function step(){
     let moving=false;
     for(const k in goal){
@@ -570,11 +670,15 @@ function createScene(){
   $('views').addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(b){ turnTo(+b.dataset.a); goal.x=0; } });
   $('zin').onclick=()=>zoom(1.5); $('zout').onclick=()=>zoom(1/1.5);
   $('lines').onclick=e=>{ lines.visible=!lines.visible; e.target.classList.toggle('on',lines.visible); dirty=true; };
-  /* [ángulo, x, y, acercamiento] */
-  const ZONES={all:[0,0,-8,1],head:[25,0,322,4.6],hand:[0,92,-2,5.5],foot:[35,0,-328,4.2]};
+  /* [ángulo, x, y, acercamiento]: centra en pantalla la articulación pedida */
+  const aim=(angle,joint,zoomTo,dy=0)=>{
+    const r=angle*Math.PI/180, c=world(J(joint));
+    return [angle, c[0]*Math.cos(r)-c[2]*Math.sin(r), c[1]+dy, zoomTo];
+  };
+  const ZONES={all:()=>[0,0,-8,1],head:()=>[25,0,318,4.6],hand:()=>aim(72,'finger-3-1',5),foot:()=>aim(40,'foot-1',4.4,8)};
   $('zones').addEventListener('click',e=>{
     const b=e.target.closest('[data-z]'); if(!b) return;
-    const [a,x,y,z]=ZONES[b.dataset.z];
+    const [a,x,y,z]=ZONES[b.dataset.z]();
     turnTo(a); Object.assign(goal,{x,y,z}); mark(b.dataset.z);
   });
 
