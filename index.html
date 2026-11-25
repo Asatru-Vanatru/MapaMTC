@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa Interactivo de Acupuntura</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#12100e; --panel:#1b1815; --panel2:#241f1b; --line:#38302a;
+  --ink:#f2ece4; --ink2:#a9a09a; --accent:#c8553d; --gold:#d9a84e;
+}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif}
+header{padding:14px 14px 10px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#1d1916,#12100e)}
+h1{margin:0;font-size:17px;font-weight:650;letter-spacing:.2px}
+h1 span{color:var(--gold);font-weight:400}
+.sub{margin:3px 0 0;font-size:11.5px;color:var(--ink2)}
+.wrap{padding:10px 10px 90px;max-width:620px;margin:0 auto}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:9px}
+input[type=search]{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);
+  color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;outline:none}
+input[type=search]:focus{border-color:var(--gold)}
+.toggle{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.toggle button{background:none;border:0;color:var(--ink2);padding:10px 13px;font-size:13px;font-weight:600;cursor:pointer}
+.toggle button.on{background:var(--accent);color:#fff}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--ink2);
+  border-radius:999px;padding:6px 11px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.chip.on{color:#fff;border-color:transparent}
+.dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.stage{background:radial-gradient(ellipse at 50% 35%,#211c18,#141210);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative}
+svg{display:block;width:100%;height:auto;touch-action:manipulation}
+.body-fill{fill:#2e2823;stroke:#4a3f37;stroke-width:1.2}
+.pt{cursor:pointer}
+.pt circle.hit{fill:transparent}
+.pt circle.vis{stroke:#15120f;stroke-width:1}
+.pt.sel circle.vis{stroke:#fff;stroke-width:2}
+.pt.dim{opacity:.13}
+.lbl{font-size:7.5px;fill:#efe7dd;paint-order:stroke;stroke:#15120f;stroke-width:2.2px;
+  stroke-linejoin:round;pointer-events:none;font-weight:700}
+.viewname{font-size:10px;fill:#6f645c;letter-spacing:2px}
+.card{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card.empty{color:var(--ink2);font-size:13px;text-align:center;padding:22px 14px}
+.code{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:7px;color:#fff}
+.hz{font-size:30px;font-weight:600;margin:10px 0 2px;line-height:1.15;
+  font-family:"Noto Serif SC","Songti SC",serif;letter-spacing:2px}
+.py{font-size:14px;color:var(--gold);font-style:italic;margin:0}
+.es{font-size:17px;font-weight:600;margin:8px 0 0}
+.meta{font-size:12px;color:var(--ink2);margin:8px 0 0;line-height:1.5}
+.ind{margin:11px 0 0;padding-top:11px;border-top:1px solid var(--line);font-size:13.5px;line-height:1.6}
+.ind b{color:var(--gold);font-weight:600;font-size:11px;letter-spacing:.8px;display:block;margin-bottom:4px;text-transform:uppercase}
+.list{margin-top:10px;max-height:290px;overflow-y:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.item{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #2a241f;cursor:pointer}
+.item:last-child{border-bottom:0}
+.item:active{background:var(--panel2)}
+.item .c{font-size:11px;font-weight:700;color:#fff;border-radius:6px;padding:3px 7px;flex:0 0 auto;min-width:46px;text-align:center}
+.item .t{flex:1;min-width:0}
+.item .t1{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .t1 em{font-style:normal;font-family:"Noto Serif SC",serif;color:var(--gold)}
+.item .t2{font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-align:center}
+.count{font-size:11px;color:var(--ink2);padding:2px 4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mapa de Acupuntura <span>· 针灸穴位图</span></h1>
+  <p class="sub">14 canales · 100 puntos · nombre chino, pinyin y traducción al español</p>
+</header>
+
+<div class="wrap">
+  <div class="row">
+    <input type="search" id="q" placeholder="Buscar: 合谷, Hegu, IG4, valle…" autocomplete="off">
+    <div class="toggle">
+      <button id="bFront" class="on">Frente</button>
+      <button id="bBack">Dorso</button>
+    </div>
+  </div>
+
+  <div class="chips" id="chips"></div>
+
+  <div class="stage">
+    <svg id="svg" viewBox="0 0 300 770" xmlns="http://www.w3.org/2000/svg">
+      <g id="silhouette"></g>
+      <g id="points"></g>
+      <text class="viewname" id="vn" x="150" y="762" text-anchor="middle">VISTA ANTERIOR</text>
+    </svg>
+  </div>
+
+  <div class="count" id="count"></div>
+  <div class="card empty" id="card">Toca un punto del mapa o búscalo por nombre.</div>
+  <div class="list" id="list"></div>
+
+  <footer>
+    Las posiciones son esquemáticas y orientativas: sirven para ubicar el canal,
+    no reemplazan la localización anatómica por cun ni los textos de referencia.
+  </footer>
+</div>
+
+<script>
+/* ---------- canales ---------- */
+const M = {
+  P :{es:"Pulmón",             hz:"手太阴肺经", c:"#e3e3e3", el:"Metal"},
+  IG:{es:"Intestino Grueso",   hz:"手阳明大肠经", c:"#b9b2a6", el:"Metal"},
+  E :{es:"Estómago",           hz:"足阳明胃经", c:"#d9a84e", el:"Tierra"},
+  BP:{es:"Bazo-Páncreas",      hz:"足太阴脾经", c:"#c9872f", el:"Tierra"},
+  C :{es:"Corazón",            hz:"手少阴心经", c:"#d94f3d", el:"Fuego"},
+  ID:{es:"Intestino Delgado",  hz:"手太阳小肠经", c:"#e8795f", el:"Fuego"},
+  V :{es:"Vejiga",             hz:"足太阳膀胱经", c:"#4a7fb5", el:"Agua"},
+  R :{es:"Riñón",              hz:"足少阴肾经", c:"#2f5d8c", el:"Agua"},
+  PC:{es:"Pericardio",         hz:"手厥阴心包经", c:"#b5485f", el:"Fuego"},
+  TR:{es:"Triple Recalentador",hz:"手少阳三焦经", c:"#c25f8a", el:"Fuego"},
+  VB:{es:"Vesícula Biliar",    hz:"足少阳胆经", c:"#5f9e73", el:"Madera"},
+  H :{es:"Hígado",             hz:"足厥阴肝经", c:"#3d8259", el:"Madera"},
+  RM:{es:"Ren Mai (Vaso Concepción)", hz:"任脉", c:"#8f7ac4", el:"Vaso extraordinario"},
+  DM:{es:"Du Mai (Vaso Gobernador)",  hz:"督脉", c:"#6a5aa8", el:"Vaso extraordinario"}
+};
+
+/* ---------- puntos ----------
+   [canal, nº, 汉字, pinyin, nombre español, vista(f/b), dx desde línea media, y, indicaciones, mid?]
+*/
+const RAW = [
+["P",1,"中府","Zhōngfǔ","Palacio Central","f",32,150,"Tos, disnea, plenitud torácica. Punto de reunión del Qi del Pulmón."],
+["P",5,"尺泽","Chǐzé","Pantano del Codo","f",68,262,"Tos con flema, calor en el Pulmón, dolor de codo. Punto Agua, dispersa calor."],
+["P",7,"列缺","Lièquē","Hendidura Interrumpida","f",82,350,"Resfrío, cefalea occipital, rigidez de cuello. Luo del Pulmón, abre el Ren Mai."],
+["P",9,"太渊","Tàiyuān","Abismo Supremo","f",84,358,"Tonifica el Qi del Pulmón. Punto Yuan y de reunión de los vasos."],
+["P",11,"少商","Shàoshāng","Shang Menor","f",88,402,"Faringitis aguda, fiebre, pérdida de voz. Sangrado puntual."],
+["IG",1,"商阳","Shāngyáng","Shang Yang","f",94,404,"Dolor de garganta, fiebre, desmayo. Punto Jing distal."],
+["IG",4,"合谷","Hégǔ","Valle de Unión","f",90,378,"Punto maestro de cara y cabeza: cefalea, dentalgia, resfrío, dolor en general. Contraindicado en embarazo."],
+["IG",10,"手三里","Shǒusānlǐ","Tres Distancias del Brazo","f",64,284,"Codo de tenista, dolor de antebrazo, parálisis del miembro superior."],
+["IG",11,"曲池","Qūchí","Estanque Sinuoso","f",62,258,"Fiebre, prurito, urticaria, eccema, codo. Gran punto para dispersar calor."],
+["IG",15,"肩髃","Jiānyú","Hueso del Hombro","f",48,137,"Hombro doloroso, limitación de abducción, hemiplejía."],
+["IG",20,"迎香","Yíngxiāng","Bienvenida a la Fragancia","f",7,73,"Congestión y obstrucción nasal, rinitis, anosmia, epistaxis."],
+["E",1,"承泣","Chéngqì","Receptor de Lágrimas","f",12,58,"Lagrimeo, visión borrosa, conjuntivitis, tics palpebrales."],
+["E",4,"地仓","Dìcāng","Granero Terrestre","f",13,81,"Parálisis facial, desviación de la boca, sialorrea."],
+["E",6,"颊车","Jiáchē","Carro de la Mandíbula","f",22,85,"Trismo, dentalgia, parálisis facial, dolor de ATM."],
+["E",7,"下关","Xiàguān","Barrera Inferior","f",26,70,"ATM, dentalgia, acúfenos, parálisis facial."],
+["E",25,"天枢","Tiānshū","Pivote Celestial","f",14,259,"Diarrea, estreñimiento, distensión abdominal. Punto Mu del Intestino Grueso."],
+["E",34,"梁丘","Liángqiū","Colina de la Viga","f",30,481,"Dolor y edema de rodilla, gastralgia aguda, mastitis."],
+["E",36,"足三里","Zúsānlǐ","Tres Distancias de la Pierna","f",32,531,"El gran tonificante: fatiga, digestión, inmunidad, náusea, debilidad general."],
+["E",40,"丰隆","Fēnglóng","Abundante Prominencia","f",38,580,"Punto clave para resolver flema y mucosidad; tos, obesidad, vértigo, ansiedad."],
+["E",44,"内庭","Nèitíng","Patio Interior","f",34,722,"Dentalgia, acidez, mal aliento, calor en el Estómago."],
+["BP",1,"隐白","Yǐnbái","Blanco Oculto","f",20,731,"Metrorragia, sangrados, sueños excesivos. Punto Jing distal."],
+["BP",3,"太白","Tàibái","Blanco Supremo","f",22,719,"Tonifica el Bazo: distensión, diarrea, pesadez corporal. Punto Yuan."],
+["BP",4,"公孙","Gōngsūn","Abuelo Nieto","f",22,711,"Dolor epigástrico, borborigmos. Luo del Bazo, abre el Chong Mai."],
+["BP",6,"三阴交","Sānyīnjiāo","Cruce de los Tres Yin","f",22,641,"Ginecología: dismenorrea, irregularidad menstrual, infertilidad; digestión, insomnio. Contraindicado en embarazo."],
+["BP",9,"阴陵泉","Yīnlíngquán","Fuente del Montículo Yin","f",20,521,"Edema, retención de líquidos, disuria, diarrea, humedad."],
+["BP",10,"血海","Xuèhǎi","Mar de Sangre","f",20,478,"Prurito, eccema, urticaria, trastornos menstruales. Mueve y nutre la Sangre."],
+["BP",21,"大包","Dàbāo","Gran Envoltura","f",48,205,"Dolor torácico generalizado, debilidad de los cuatro miembros. Gran Luo del Bazo."],
+["C",1,"极泉","Jíquán","Fuente Suprema","f",40,151,"Dolor cardíaco, dolor de hombro y brazo, linfadenopatía axilar."],
+["C",3,"少海","Shàohǎi","Mar Menor","f",76,268,"Dolor de codo, temblor de mano, angustia, amnesia."],
+["C",5,"通里","Tōnglǐ","Comunicación Interior","f",86,346,"Palpitaciones, afasia, lengua rígida. Luo del Corazón."],
+["C",6,"阴郄","Yīnxì","Hendidura Yin","f",87,352,"Sudoración nocturna, hemorragias, palpitaciones con calor."],
+["C",7,"神门","Shénmén","Puerta del Espíritu","f",88,361,"Insomnio, ansiedad, palpitaciones, amnesia. El punto del Shen por excelencia."],
+["C",9,"少冲","Shàochōng","Embestida Menor","f",92,401,"Palpitaciones, dolor cardíaco, pérdida de conciencia, fiebre."],
+["ID",3,"后溪","Hòuxī","Arroyo Posterior","b",92,381,"Rigidez de cuello y espalda, lumbalgia aguda, tortícolis. Abre el Du Mai."],
+["ID",6,"养老","Yǎnglǎo","Cuidado del Anciano","b",86,356,"Visión borrosa, dolor de hombro y brazo, lumbalgia."],
+["ID",9,"肩贞","Jiānzhēn","Hombro Verdadero","b",44,149,"Hombro doloroso, limitación del movimiento, dolor escapular."],
+["ID",11,"天宗","Tiānzōng","Veneración Celestial","b",32,166,"Dolor escapular, hombro congelado, mastitis."],
+["ID",18,"颧髎","Quánliáo","Hueso del Pómulo","f",20,66,"Parálisis facial, neuralgia del trigémino, dentalgia."],
+["ID",19,"听宫","Tīnggōng","Palacio de la Audición","f",30,62,"Acúfenos, hipoacusia, otitis, dolor de ATM."],
+["V",1,"睛明","Jīngmíng","Ojos Brillantes","f",11,52,"Enrojecimiento ocular, lagrimeo, visión borrosa, miopía."],
+["V",2,"攒竹","Zǎnzhú","Bambúes Reunidos","f",13,44,"Cefalea frontal, dolor supraorbitario, sinusitis, hipo."],
+["V",10,"天柱","Tiānzhù","Pilar Celestial","b",10,99,"Rigidez de cuello, cefalea occipital, congestión nasal, mareo."],
+["V",13,"肺俞","Fèishū","Punto Shu del Pulmón","b",13,166,"Tos, asma, sudoración espontánea, afecciones cutáneas."],
+["V",15,"心俞","Xīnshū","Punto Shu del Corazón","b",13,191,"Palpitaciones, ansiedad, insomnio, amnesia, sudoración nocturna."],
+["V",18,"肝俞","Gānshū","Punto Shu del Hígado","b",13,226,"Irritabilidad, dolor en hipocondrio, trastornos oculares, ictericia."],
+["V",20,"脾俞","Píshū","Punto Shu del Bazo","b",13,246,"Digestión débil, diarrea, edema, cansancio, sangrados."],
+["V",23,"肾俞","Shènshū","Punto Shu del Riñón","b",13,276,"Lumbalgia crónica, acúfenos, fatiga, impotencia, enuresis."],
+["V",25,"大肠俞","Dàchángshū","Punto Shu del Intestino Grueso","b",13,296,"Lumbalgia, lumbociatalgia, estreñimiento, diarrea."],
+["V",40,"委中","Wěizhōng","Centro del Pliegue","b",28,506,"Punto maestro de la lumbalgia; ciática, rigidez de espalda, calambres."],
+["V",57,"承山","Chéngshān","Soporte de la Montaña","b",30,591,"Calambres de gemelo, ciática, hemorroides."],
+["V",60,"昆仑","Kūnlún","Monte Kunlun","f",40,687,"Cefalea occipital, rigidez cervical, lumbalgia, dolor de tobillo."],
+["V",62,"申脉","Shēnmài","Vaso Extendido","f",40,701,"Insomnio, lumbalgia, dolor de tobillo. Abre el Yang Qiao Mai."],
+["V",67,"至阴","Zhìyīn","Alcanzando el Yin","b",36,731,"Presentación podálica (moxa), cefalea, obstrucción nasal."],
+["R",1,"涌泉","Yǒngquán","Fuente Burbujeante","b",26,725,"Desciende el Yang: cefalea en vértex, hipertensión, insomnio, pánico, pérdida de conciencia."],
+["R",3,"太溪","Tàixī","Arroyo Supremo","f",24,689,"Tonifica el Riñón: acúfenos, lumbalgia, sofocos, sequedad, fatiga. Punto Yuan."],
+["R",6,"照海","Zhàohǎi","Mar Luminoso","f",24,697,"Garganta seca, insomnio, estreñimiento seco, menstruación irregular. Abre el Yin Qiao Mai."],
+["R",7,"复溜","Fùliū","Flujo Recurrente","f",26,661,"Edema, sudoración anómala, diarrea, regula los líquidos."],
+["R",10,"阴谷","Yīngǔ","Valle Yin","f",18,499,"Disuria, dolor genital, dolor en cara interna de rodilla."],
+["R",27,"俞府","Shūfǔ","Palacio Shu","f",13,137,"Tos, disnea, plenitud torácica, vómito. Último punto del canal."],
+["PC",3,"曲泽","Qūzé","Pantano Sinuoso","f",72,266,"Dolor cardíaco, calor con agitación, vómito, temblor de brazo."],
+["PC",6,"内关","Nèiguān","Paso Interior","f",80,341,"Náusea y vómito, mareo por movimiento, palpitaciones, ansiedad, dolor torácico. Luo del Pericardio."],
+["PC",7,"大陵","Dàlíng","Gran Montículo","f",82,359,"Insomnio, dolor de muñeca, síndrome del túnel carpiano, agitación."],
+["PC",8,"劳宫","Láogōng","Palacio del Trabajo","f",84,381,"Calor en el Corazón, aftas, mal aliento, sudoración palmar, agitación."],
+["PC",9,"中冲","Zhōngchōng","Embestida Central","f",86,405,"Pérdida de conciencia, golpe de calor, fiebre alta, rigidez de lengua."],
+["TR",1,"关冲","Guānchōng","Embestida de la Barrera","b",94,399,"Cefalea, dolor de garganta, acúfenos, fiebre."],
+["TR",3,"中渚","Zhōngzhū","Islote Central","b",88,383,"Acúfenos, hipoacusia, dolor de mano y dedos, cefalea temporal."],
+["TR",4,"阳池","Yángchí","Estanque Yang","b",88,363,"Dolor de muñeca, tendinitis, sequedad de boca, diabetes."],
+["TR",5,"外关","Wàiguān","Paso Exterior","b",84,346,"Resfrío, cefalea temporal, acúfenos, dolor de hombro y brazo. Abre el Yang Wei Mai."],
+["TR",14,"肩髎","Jiānliáo","Hueso del Hombro (Yang)","b",50,134,"Hombro doloroso, limitación de la elevación del brazo."],
+["TR",17,"翳风","Yìfēng","Pantalla del Viento","b",28,76,"Acúfenos, hipoacusia, parálisis facial, parotiditis, ATM."],
+["TR",21,"耳门","Ěrmén","Puerta del Oído","f",31,58,"Acúfenos, otitis, hipoacusia, dentalgia."],
+["TR",23,"丝竹空","Sīzhúkōng","Hueco del Bambú de Seda","f",28,42,"Cefalea temporal, dolor ocular, tics palpebrales, migraña."],
+["VB",2,"听会","Tīnghuì","Reunión Auditiva","f",31,67,"Acúfenos, hipoacusia, luxación de mandíbula, dentalgia."],
+["VB",14,"阳白","Yángbái","Blanco Yang","f",15,38,"Cefalea frontal, ptosis palpebral, dolor supraorbitario."],
+["VB",20,"风池","Fēngchí","Estanque del Viento","b",16,93,"Cefalea, mareo, rigidez cervical, resfrío, ojos rojos, hipertensión."],
+["VB",21,"肩井","Jiānjǐng","Pozo del Hombro","b",30,127,"Tensión de hombros y cuello, cefalea, mastitis. Contraindicado en embarazo."],
+["VB",30,"环跳","Huántiào","Salto Circular","b",40,331,"Ciática, dolor de cadera, lumbociatalgia, hemiplejía."],
+["VB",31,"风市","Fēngshì","Mercado del Viento","f",42,421,"Prurito generalizado, dolor y debilidad del muslo, ciática."],
+["VB",34,"阳陵泉","Yánglíngquán","Fuente del Montículo Yang","f",42,519,"Punto maestro de tendones y músculos; dolor de rodilla, ciática, amargor de boca."],
+["VB",39,"悬钟","Xuánzhōng","Campana Suspendida","f",42,651,"Reunión de las médulas: rigidez cervical, ciática, acúfenos, anemia."],
+["VB",40,"丘墟","Qiūxū","Ruina del Montículo","f",40,691,"Esguince de tobillo, dolor en hipocondrio, dolor torácico lateral."],
+["VB",41,"足临泣","Zúlínqì","Lágrimas que Caen del Pie","f",36,713,"Migraña, mastitis, dolor ocular, trastornos menstruales."],
+["H",1,"大敦","Dàdūn","Gran Montículo","f",26,733,"Hernia, dolor genital, metrorragia, enuresis."],
+["H",2,"行间","Xíngjiān","Paso Intermedio","f",30,727,"Irritabilidad, ojos rojos, cefalea, dismenorrea. Dispersa fuego del Hígado."],
+["H",3,"太冲","Tàichōng","Gran Embestida","f",28,717,"Punto clave del Hígado: estrés, cefalea, mareo, dismenorrea, insomnio, hipertensión."],
+["H",8,"曲泉","Qūquán","Fuente Sinuosa","f",16,501,"Dolor genital, prurito vulvar, disuria, dolor de rodilla medial."],
+["H",13,"章门","Zhāngmén","Puerta del Capítulo","f",40,229,"Distensión abdominal, diarrea, dolor en hipocondrio. Punto Mu del Bazo."],
+["H",14,"期门","Qīmén","Puerta del Ciclo","f",26,197,"Dolor en hipocondrio, suspiros, reflujo, mastitis. Punto Mu del Hígado."],
+["RM",3,"中极","Zhōngjí","Centro Culminante","f",0,301,"Disuria, cistitis, incontinencia, dismenorrea. Punto Mu de la Vejiga.",1],
+["RM",4,"关元","Guānyuán","Puerta del Origen","f",0,286,"Gran tonificante del Yuan Qi: fatiga, infertilidad, frío, diarrea crónica. Punto Mu del Intestino Delgado.",1],
+["RM",6,"气海","Qìhǎi","Mar de Qi","f",0,272,"Fatiga, debilidad general, distensión abdominal, prolapsos. Tonifica el Qi.",1],
+["RM",8,"神阙","Shénquè","Puerta del Espíritu (ombligo)","f",0,253,"Diarrea por frío, dolor abdominal, colapso. Solo moxa, no se punciona.",1],
+["RM",12,"中脘","Zhōngwǎn","Centro del Epigastrio","f",0,233,"Gastralgia, náusea, reflujo, distensión. Punto Mu del Estómago.",1],
+["RM",17,"膻中","Dànzhōng","Centro del Pecho","f",0,173,"Opresión torácica, disnea, angustia, lactancia escasa. Mar del Qi superior.",1],
+["RM",22,"天突","Tiāntū","Chimenea Celestial","f",0,129,"Tos, asma, afonía, sensación de bulto en la garganta.",1],
+["RM",24,"承浆","Chéngjiāng","Receptor de Fluidos","f",0,93,"Parálisis facial, sialorrea, dentalgia inferior, desviación de la boca.",1],
+["DM",1,"长强","Chángqiáng","Fuerza Duradera","b",0,326,"Hemorroides, prolapso rectal, dolor coccígeo.",1],
+["DM",3,"腰阳关","Yāoyángguān","Barrera Yang Lumbar","b",0,296,"Lumbalgia, lumbociatalgia, debilidad de piernas, irregularidad menstrual.",1],
+["DM",4,"命门","Mìngmén","Puerta de la Vida","b",0,276,"Lumbalgia por frío, fatiga profunda, impotencia, diarrea crónica. Tonifica el Yang del Riñón.",1],
+["DM",14,"大椎","Dàzhuī","Gran Vértebra","b",0,123,"Fiebre, resfrío, rigidez cervical, asma. Reunión de todos los canales Yang.",1],
+["DM",16,"风府","Fēngfǔ","Palacio del Viento","b",0,97,"Cefalea occipital, rigidez de cuello, mareo, afonía.",1],
+["DM",20,"百会","Bǎihuì","Cien Reuniones","b",0,30,"Cefalea en vértex, mareo, prolapsos, depresión, claridad mental.",1],
+["DM",26,"人中","Rénzhōng","Centro del Hombre (Shuǐgōu)","f",0,79,"Punto de urgencia: desmayo, colapso, shock, lumbalgia aguda.",1]
+];
+
+const PTS = RAW.map((r,i)=>({id:i,mer:r[0],num:r[1],hz:r[2],py:r[3],es:r[4],view:r[5],dx:r[6],y:r[7],ind:r[8],mid:!!r[9]}));
+const code = p => p.mer + p.num;
+
+/* ---------- silueta ---------- */
+const CX = 150;
+function silhouette(view){
+  const back = view==='b';
+  const p = [];
+  // cabeza + cuello
+  p.push(`<ellipse class="body-fill" cx="${CX}" cy="62" rx="40" ry="48"/>`);
+  p.push(`<rect class="body-fill" x="${CX-14}" y="100" width="28" height="30" rx="8"/>`);
+  // torso
+  p.push(`<path class="body-fill" d="M ${CX-50} 134 Q ${CX-56} 150 ${CX-48} 196
+    L ${CX-46} 250 Q ${CX-48} 300 ${CX-40} 335 L ${CX+40} 335
+    Q ${CX+48} 300 ${CX+46} 250 L ${CX+48} 196 Q ${CX+56} 150 ${CX+50} 134 Z"/>`);
+  // brazos
+  for(const s of [-1,1]){
+    p.push(`<path class="body-fill" d="M ${CX+s*48} 136
+      Q ${CX+s*70} 180 ${CX+s*74} 262
+      Q ${CX+s*82} 320 ${CX+s*86} 358
+      L ${CX+s*96} 356 Q ${CX+s*92} 300 ${CX+s*86} 258
+      Q ${CX+s*78} 180 ${CX+s*60} 134 Z"/>`);
+    p.push(`<path class="body-fill" d="M ${CX+s*82} 356 Q ${CX+s*98} 368 ${CX+s*96} 400
+      Q ${CX+s*90} 412 ${CX+s*82} 404 Q ${CX+s*78} 378 ${CX+s*78} 358 Z"/>`);
+  }
+  // piernas
+  for(const s of [-1,1]){
+    p.push(`<path class="body-fill" d="M ${CX+s*8} 332
+      L ${CX+s*48} 332 Q ${CX+s*46} 420 ${CX+s*42} 500
+      Q ${CX+s*44} 600 ${CX+s*40} 700
+      L ${CX+s*16} 700 Q ${CX+s*14} 600 ${CX+s*16} 500
+      Q ${CX+s*12} 420 ${CX+s*8} 332 Z"/>`);
+    p.push(`<path class="body-fill" d="M ${CX+s*16} 698 L ${CX+s*40} 698
+      Q ${CX+s*42} 724 ${CX+s*36} 738 L ${CX+s*18} 738 Q ${CX+s*14} 720 ${CX+s*16} 698 Z"/>`);
+  }
+  // línea media / columna
+  if(back) p.push(`<line x1="${CX}" y1="120" x2="${CX}" y2="332" stroke="#50443b" stroke-width="2" stroke-dasharray="4 4"/>`);
+  else     p.push(`<line x1="${CX}" y1="130" x2="${CX}" y2="310" stroke="#463c34" stroke-width="1" stroke-dasharray="3 5"/>`);
+  return p.join('');
+}
+
+/* ---------- estado ---------- */
+let view='f', filter=null, sel=null, query='';
+const $ = id => document.getElementById(id);
+
+/* chips de canal */
+$('chips').innerHTML = `<button class="chip on" data-m="">Todos</button>` +
+  Object.keys(M).map(k=>`<button class="chip" data-m="${k}" style="--mc:${M[k].c}">
+    <span class="dot" style="background:${M[k].c}"></span>${k} · ${M[k].es}</button>`).join('');
+
+$('chips').addEventListener('click',e=>{
+  const b = e.target.closest('.chip'); if(!b) return;
+  filter = b.dataset.m || null;
+  [...$('chips').children].forEach(c=>{
+    const on = c===b; c.classList.toggle('on',on);
+    c.style.background = on && filter ? M[filter].c : '';
+    c.style.color = on ? '#fff' : '';
+  });
+  render();
+});
+
+$('bFront').onclick = ()=>setView('f');
+$('bBack').onclick  = ()=>setView('b');
+function setView(v){
+  view=v;
+  $('bFront').classList.toggle('on',v==='f');
+  $('bBack').classList.toggle('on',v==='b');
+  $('vn').textContent = v==='f' ? 'VISTA ANTERIOR' : 'VISTA POSTERIOR';
+  render();
+}
+
+$('q').addEventListener('input',e=>{ query=e.target.value.trim().toLowerCase(); render(); });
+
+const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+function matches(p){
+  if(!query) return true;
+  const q = norm(query);
+  return p.hz.includes(query) || norm(p.py).includes(q) || norm(p.es).includes(q) ||
+         norm(code(p)).includes(q) || norm(M[p.mer].es).includes(q) || norm(p.ind).includes(q);
+}
+
+/* ---------- render ---------- */
+function render(){
+  $('silhouette').innerHTML = silhouette(view);
+  const vis = PTS.filter(p=>p.view===view);
+  let svg='';
+  for(const p of vis){
+    const active = (!filter || p.mer===filter) && matches(p);
+    const cls = 'pt' + (active?'':' dim') + (sel===p.id?' sel':'');
+    const r = sel===p.id ? 5.4 : 3.6;
+    const xs = p.mid ? [CX] : [CX-p.dx, CX+p.dx];
+    for(const x of xs){
+      svg += `<g class="${cls}" data-id="${p.id}">
+        <circle class="hit" cx="${x}" cy="${p.y}" r="13"/>
+        <circle class="vis" cx="${x}" cy="${p.y}" r="${r}" fill="${M[p.mer].c}"/>
+      </g>`;
+    }
+    if(sel===p.id){
+      const lx = p.mid ? CX+9 : CX+p.dx+9;
+      svg += `<text class="lbl" x="${lx}" y="${p.y-7}">${code(p)}</text>`;
+    }
+  }
+  $('points').innerHTML = svg;
+
+  // lista
+  const list = PTS.filter(p=>(!filter||p.mer===filter) && matches(p));
+  $('count').textContent = `${list.length} punto${list.length===1?'':'s'}` +
+    (filter?` · ${M[filter].es}`:'') + (query?` · "${query}"`:'');
+  $('list').innerHTML = list.length ? list.map(p=>`
+    <div class="item" data-id="${p.id}">
+      <span class="c" style="background:${M[p.mer].c}">${code(p)}</span>
+      <div class="t">
+        <div class="t1"><em>${p.hz}</em> · ${p.py}</div>
+        <div class="t2">${p.es} — ${p.view==='f'?'anterior':'posterior'}</div>
+      </div>
+    </div>`).join('') : `<div class="item" style="color:#a9a09a">Sin resultados.</div>`;
+
+  // ficha
+  if(sel==null){
+    $('card').className='card empty';
+    $('card').textContent='Toca un punto del mapa o búscalo por nombre.';
+  } else {
+    const p = PTS[sel], m = M[p.mer];
+    $('card').className='card';
+    $('card').innerHTML = `
+      <span class="code" style="background:${m.c}">${code(p)}</span>
+      <div class="hz">${p.hz}</div>
+      <p class="py">${p.py}</p>
+      <p class="es">${p.es}</p>
+      <p class="meta">Canal de ${m.es} · <span style="font-family:'Noto Serif SC',serif">${m.hz}</span><br>
+        ${m.el} · vista ${p.view==='f'?'anterior':'posterior'} · ${p.mid?'punto medial (único)':'punto bilateral'}</p>
+      <div class="ind"><b>Indicaciones principales</b>${p.ind}</div>`;
+  }
+}
+
+function pick(id){
+  const p = PTS[id];
+  if(p.view!==view) setView(p.view);
+  sel = id; render();
+  $('card').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+$('svg').addEventListener('click',e=>{ const g=e.target.closest('.pt'); if(g) pick(+g.dataset.id); });
+$('list').addEventListener('click',e=>{ const i=e.target.closest('.item'); if(i&&i.dataset.id) pick(+i.dataset.id); });
+
+render();
+</script>
+</body>
+</html>
