@@ -129,6 +129,7 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
   .hint{font-size:10px}
 }
 @media (prefers-reduced-motion:reduce){ .hint{transition:none} }
+.credits{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -184,11 +185,17 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
 </main>
 
   <footer>
-    Cuerpo 3D basado en la malla de <a href="https://github.com/makehumancommunity/makehuman" style="color:inherit">MakeHuman</a> (CC0).<br>
     <strong>Material educativo.</strong> No reemplaza la consulta, el diagnóstico ni el tratamiento
     de un profesional de la salud. La punción y la moxa requieren formación.<br>
     Las posiciones son esquemáticas y orientativas: sirven para ubicar el canal,
     no reemplazan la localización anatómica por cun ni los textos de referencia.
+    <div class="credits">
+      <strong>© 2026 Serpiente Lunar.</strong> Todos los derechos reservados sobre el diseño y los contenidos propios.<br>
+      Desarrollado por Serpiente Lunar con la asistencia de Claude, de Anthropic.<br>
+      Cuerpo 3D adaptado de la malla base y el modelado masculino de <a href="https://github.com/makehumancommunity/makehuman" style="color:inherit" target="_blank" rel="noopener">MakeHuman</a> (CC0).<br>
+      Gráficos 3D con <a href="https://github.com/mrdoob/three.js" style="color:inherit" target="_blank" rel="noopener">three.js</a> © 2010–2021 autores de three.js (<a href="https://github.com/mrdoob/three.js/blob/r128/LICENSE" style="color:inherit" target="_blank" rel="noopener">licencia MIT</a>).<br>
+      Los recursos de terceros conservan sus propias licencias.
+    </div>
   </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
