@@ -89,6 +89,7 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
       <button data-a="90">Lado izq.</button><button data-a="-90">Lado der.</button>
       <button id="zin" aria-label="Acercar">＋</button><button id="zout" aria-label="Alejar">－</button>
       <button id="lines" class="on">Líneas</button>
+      <button id="names" class="on">Nombres</button>
     </div>
     <div class="tag" id="tag"></div>
     <div class="hint">Arrastra para girar · acerca con la rueda o dos dedos</div>
@@ -503,6 +504,91 @@ H8:['L 440 -75','F 34 340'],
 DM4:['B 0.5 200'],DM20:['R 0.5 45 6 0 -0.6 0.8','F 0.5 28']
 };
 
+/* ----- nombres impresos sobre la piel -----
+   Cada rótulo es una pequeña cuadrícula que se pega punto por punto a la superficie. */
+const FONT_HZ='"Noto Serif SC","Source Han Serif SC","Songti SC",SimSun,"Microsoft YaHei",serif';
+function ink(color){ const n=parseInt(color.slice(1),16); return 'rgb('+[n>>16,n>>8&255,n&255].map(v=>Math.round(v*.45)).join()+')'; }
+const texCache={};
+function labelTexture(p){
+  if(texCache[p.id]) return texCache[p.id];
+  const c=document.createElement('canvas'), g=c.getContext('2d'), big=96, small=62;
+  g.font='600 '+big+'px '+FONT_HZ;
+  const w=Math.ceil(Math.max(g.measureText(p.hz).width, small*code(p).length*.66))+20;
+  c.width=w; c.height=big+small+22;
+  g.textAlign='center'; g.textBaseline='top'; g.lineJoin='round';
+  const write=(text,font,y,color)=>{
+    g.font=font; g.lineWidth=7; g.strokeStyle='rgba(244,233,211,.7)'; g.strokeText(text,w/2,y);
+    g.fillStyle=color; g.fillText(text,w/2,y);
+  };
+  write(p.hz,'600 '+big+'px '+FONT_HZ,6,'#1d1712');
+  write(code(p),'700 '+small+'px ui-sans-serif,"Segoe UI",Arial,sans-serif',big+14,ink(M[p.mer].c));
+  const t=new THREE.CanvasTexture(c); t.anisotropy=8;
+  return texCache[p.id]={t,ratio:w/c.height};
+}
+/* zonas con muchos puntos juntos: letra más chica */
+function labelHeight(p,q){
+  const hand=Math.hypot(...subv([Math.abs(q[0]),q[1],q[2]],J('finger-3-1')))<62;
+  if(q[1]<120) return 5.6;
+  if(hand) return 5.6;
+  if(q[1]>690) return 6;
+  return 10.4;
+}
+/* dirección de la escena -> dirección sobre la malla original, en el punto q */
+function toModel(q,dirW){
+  const base=world(q);
+  return unit([0,1,2].map(i=>{ const e=[0,0,0]; e[i]=.5; return dot3(subv(world(add(q,mul(e,1))),base),dirW); }));
+}
+/* elige junto a cada punto un lugar que no pise otros rótulos ni puntos */
+function layoutLabels(items){
+  const placed=[], dots=items.map(m=>world(m.q));
+  const out=[];
+  for(const m of items){
+    const base=world(m.q), nW=unit(subv(world(add(m.q,m.nm)),base));
+    let up=ortho([0,1,0],nW);
+    if(Math.abs(nW[1])>.9) up=ortho([0,0,-Math.sign(nW[1])],nW);
+    const right=unit(cross(up,nW));
+    const full=labelHeight(m.p,m.q), ratio=labelTexture(m.p).ratio;
+    const outward = (m.q[0]>=0) === (right[0]>=0) ? 1 : -1;
+    let best=null;
+    search: for(const scale of [1,.8,.64]){
+      const h=full*scale, w=h*ratio, gx=w/2+2.2, gy=h/2+2.2;
+      for(const [x,y] of [[outward*gx,0],[-outward*gx,0],[0,-gy],[0,gy],[outward*gx,-gy*.8],[outward*gx,gy*.8],[-outward*gx,-gy*.8],[-outward*gx,gy*.8]]){
+        const centre=add(base,add(mul(right,x),mul(up,y)));
+        const hits=(other,halfW,halfH)=>{
+          const d=subv(other,centre);
+          return Math.abs(dot3(d,right))<w/2+halfW && Math.abs(dot3(d,up))<h/2+halfH && Math.abs(dot3(d,nW))<9;
+        };
+        const cost=placed.filter(l=>hits(l.centre,l.w/2*.92,l.h/2*.85)).length*3
+          + dots.filter(d=>d!==base && hits(d,1.4,1.4)).length;
+        if(!best||cost<best.cost) best={cost,x,y,w,h,centre};
+        if(!cost) break search;
+      }
+    }
+    placed.push(best);
+    out.push({...best,m,right,up});
+  }
+  return out;
+}
+function labelGeometry(l){
+  const NX=8, NY=4, pos=[], uv=[], idx=[];
+  const q=l.m.q, r=toModel(q,l.right), u=toModel(q,l.up);
+  const centre=snap(add(q,add(mul(r,l.x),mul(u,l.y))),1.5);
+  const cr=ortho(r,centre.n), cu=ortho(u,centre.n);
+  for(let j=0;j<=NY;j++) for(let i=0;i<=NX;i++){
+    const flat=add(centre.p,add(mul(cr,(i/NX-.5)*l.w),mul(cu,(.5-j/NY)*l.h)));
+    pos.push(...world(snap(flat,1.5).p)); uv.push(i/NX,1-j/NY);
+  }
+  for(let j=0;j<NY;j++) for(let i=0;i<NX;i++){
+    const a=j*(NX+1)+i, b=a+1, c=a+NX+1, d=c+1;
+    idx.push(a,c,b,b,c,d);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx);
+  return g;
+}
+
 function createScene(){
   const stage=$('stage'), none={update(){},focus(){}};
   const fail=t=>{ $('msg').textContent=t+' La búsqueda y las fichas siguen disponibles.'; return none; };
@@ -518,7 +604,7 @@ function createScene(){
   const sun=new THREE.DirectionalLight(0xffffff,.36); sun.position.set(.5,.7,1); camera.add(sun); scene.add(camera);
 
   let body=null;
-  const marks=[], lines=new THREE.Group(), chans={};
+  const marks=[], lines=new THREE.Group(), names=new THREE.Group(), chans={};
   const V=p=>new THREE.Vector3(...world(p));
   const mirror=p=>[-p[0],p[1],p[2]];
   const dotGeo=new THREE.SphereGeometry(1,12,10);
@@ -548,9 +634,9 @@ function createScene(){
         const dot=new THREE.Mesh(dotGeo,new THREE.MeshBasicMaterial({color:M[p.mer].c,transparent:true}));
         dot.position.copy(V(q));
         const rim=new THREE.Mesh(dotGeo,new THREE.MeshBasicMaterial({color:0x1b1815,side:THREE.BackSide,transparent:true}));
-        rim.scale.setScalar(1.35); dot.add(rim);
+        rim.scale.setScalar(1.3); dot.add(rim);
         model.add(dot);
-        marks.push({p,dot,rim,n:new THREE.Vector3(n[0],-n[1],n[2]),left:q[0]>=0});
+        marks.push({p,q,nm:o,dot,rim,n:new THREE.Vector3(n[0],-n[1],n[2]),left:q[0]>=0});
       }
     }
     for(const k of Object.keys(M)){
@@ -570,10 +656,16 @@ function createScene(){
       const mid=k==='RM'||k==='DM';
       for(const side of (mid?[pts]:[pts,pts.map(mirror)])){
         const curve=new THREE.CatmullRomCurve3(side.map(V),false,'centripetal');
-        lines.add(new THREE.Mesh(new THREE.TubeGeometry(curve,side.length*2,.6,5,false),mat));
+        lines.add(new THREE.Mesh(new THREE.TubeGeometry(curve,side.length*2,.42,6,false),mat));
       }
     }
     model.add(lines);
+    for(const l of layoutLabels(marks)){
+      const label=new THREE.Mesh(labelGeometry(l),new THREE.MeshBasicMaterial({
+        map:labelTexture(l.m.p).t, transparent:true, depthWrite:false, side:THREE.DoubleSide}));
+      label.renderOrder=2; l.m.label=label; names.add(label);
+    }
+    model.add(names);
     $('msg').remove();
     update(); if(sel!=null) focus(sel);
   }
@@ -599,7 +691,7 @@ function createScene(){
     model.rotation.y=-cur.a*Math.PI/180;
     camera.position.set(cur.x,cur.y,fitDist()/cur.z); camera.lookAt(cur.x,cur.y,0);
     const size=1/Math.pow(cur.z,.55);
-    for(const m of marks) m.dot.scale.setScalar((m.p.id===sel?5.2:2.9)*size);
+    for(const m of marks) m.dot.scale.setScalar((m.p.id===sel?4.2:2.1)*size);
     scene.updateMatrixWorld(); camera.updateMatrixWorld();
     renderer.render(scene,camera);
     label();
@@ -676,6 +768,7 @@ function createScene(){
     return [angle, c[0]*Math.cos(r)-c[2]*Math.sin(r), c[1]+dy, zoomTo];
   };
   const ZONES={all:()=>[0,0,-8,1],head:()=>[25,0,318,4.6],hand:()=>aim(72,'finger-3-1',5),foot:()=>aim(40,'foot-1',4.4,8)};
+  $('names').onclick=e=>{ names.visible=!names.visible; e.target.classList.toggle('on',names.visible); dirty=true; };
   $('zones').addEventListener('click',e=>{
     const b=e.target.closest('[data-z]'); if(!b) return;
     const [a,x,y,z]=ZONES[b.dataset.z]();
@@ -686,8 +779,9 @@ function createScene(){
     for(const m of marks){
       const on=(!filter||m.p.mer===filter)&&matches(m.p);
       m.dot.material.opacity=m.rim.material.opacity=on?1:.1;
+      if(m.label) m.label.material.opacity=on?1:.07;
       m.rim.material.color.set(m.p.id===sel?0xff2a00:0x1b1815);
-      m.rim.scale.setScalar(m.p.id===sel?1.7:1.35);
+      m.rim.scale.setScalar(m.p.id===sel?1.6:1.3);
     }
     for(const k in chans) chans[k].opacity=(!filter||filter===k)?.95:.07;
     dirty=true;
