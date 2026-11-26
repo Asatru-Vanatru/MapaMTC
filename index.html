@@ -4,100 +4,184 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mapa Interactivo de Acupuntura</title>
+<meta name="theme-color" content="#f4eee3">
+<script>
+/* el modo guardado se aplica antes de pintar, para que no parpadee */
+try{ const t=localStorage.getItem('mapa-tema'); if(t==='rosado'||t==='nocturno') document.documentElement.dataset.theme=t; }catch(e){}
+</script>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-:root{
-  --bg:#12100e; --panel:#1b1815; --panel2:#241f1b; --line:#38302a;
-  --ink:#f2ece4; --ink2:#a9a09a; --accent:#c8553d; --gold:#d9a84e;
+/* ---------- modos ---------- */
+:root{ /* normal: papel de arroz y bermellón */
+  color-scheme:light;
+  --bg:#f4eee3; --glow:#fffaf0; --panel:#fffcf6; --panel2:#f3ead9; --line:#e3d7c1;
+  --ink:#2b241d; --ink2:#736658; --accent:#a93a28; --on-accent:#fff; --gold:#8a5f14;
+  --stage1:#fffdf8; --stage2:#f1e8d6; --stage3:#dccdb0; --glass:rgba(255,252,246,.86);
+  --shadow:0 10px 30px -18px rgba(80,55,20,.45);
+  --body3d:#eadcc0; --pedestal3d:#8a5a38;
+}
+:root[data-theme="rosado"]{
+  color-scheme:light;
+  --bg:#fbeef0; --glow:#fff8f9; --panel:#fffafb; --panel2:#fbe6eb; --line:#f0d2da;
+  --ink:#43222f; --ink2:#87596a; --accent:#b83863; --on-accent:#fff; --gold:#a23b62;
+  --stage1:#fffbfc; --stage2:#fae3e9; --stage3:#ecc0cd; --glass:rgba(255,250,251,.86);
+  --shadow:0 10px 30px -18px rgba(150,50,90,.45);
+  --body3d:#efdcc9; --pedestal3d:#d98ea4;
+}
+:root[data-theme="nocturno"]{
+  color-scheme:dark;
+  --bg:#0f1118; --glow:#1b1f2e; --panel:#181b26; --panel2:#222637; --line:#2e3348;
+  --ink:#eeeaf2; --ink2:#a3a3ba; --accent:#d9a84e; --on-accent:#1a1408; --gold:#e5bd6e;
+  --stage1:#353c58; --stage2:#1d2133; --stage3:#0f111b; --glass:rgba(24,27,38,.84);
+  --shadow:0 14px 34px -18px rgba(0,0,0,.8);
+  --body3d:#e6d8bd; --pedestal3d:#4a3326;
 }
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
   font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif}
-header{padding:14px 14px 10px;border-bottom:1px solid var(--line);
-  background:linear-gradient(180deg,#1d1916,#12100e)}
-h1{margin:0;font-size:17px;font-weight:650;letter-spacing:.2px}
-h1 span{color:var(--gold);font-weight:400}
-.sub{margin:3px 0 0;font-size:11.5px;color:var(--ink2)}
-.wrap{padding:10px 10px 90px;max-width:620px;margin:0 auto}
-.row{display:flex;gap:8px;align-items:center;margin-bottom:9px}
-input[type=search]{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);
-  color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;outline:none}
-input[type=search]:focus{border-color:var(--gold)}
-.toggle{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.toggle button{background:none;border:0;color:var(--ink2);padding:10px 13px;font-size:13px;font-weight:600;cursor:pointer}
-.toggle button.on{background:var(--accent);color:#fff}
-.chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+body{min-height:100vh;background:radial-gradient(1100px 560px at 50% -120px,var(--glow),transparent 70%),var(--bg)}
+button,input{font-family:inherit}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{max-width:1180px;margin:0 auto;padding:16px 14px 4px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:12px;align-items:center;min-width:0}
+.seal{flex:0 0 auto;width:46px;height:46px;border-radius:11px;background:var(--accent);color:var(--on-accent);
+  display:flex;align-items:center;justify-content:center;font:600 27px "Noto Serif SC","Songti SC",SimSun,serif;
+  box-shadow:inset 0 0 0 2px var(--accent),inset 0 0 0 3.5px color-mix(in srgb,var(--on-accent) 55%,transparent),var(--shadow)}
+h1{margin:0;font:600 21px/1.2 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:.2px}
+h1 span{color:var(--gold);font-weight:400;font-size:16px;white-space:nowrap}
+.sub{margin:3px 0 0;font-size:12px;color:var(--ink2)}
+.themes{display:flex;gap:2px;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:999px;box-shadow:var(--shadow)}
+.themes button{display:flex;align-items:center;gap:6px;border:0;background:none;color:var(--ink2);border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+.themes button i{width:12px;height:12px;border-radius:50%;border:1px solid #0003;background:var(--sw)}
+.themes button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.themes button[aria-pressed="true"] i{border-color:#fffa}
+
+/* ---------- distribución ---------- */
+.wrap{padding:10px 12px 40px;max-width:640px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;
+  grid-template-areas:"find" "figure" "info"}
+.find{grid-area:find;min-width:0}.figure{grid-area:figure;min-width:0}.info{grid-area:info;min-width:0}
+@media (min-width:960px){
+  .wrap{max-width:1180px;grid-template-columns:minmax(0,1fr) 420px;grid-template-rows:auto 1fr;column-gap:18px;
+    grid-template-areas:"figure find" "figure info"}
+  .figure{align-self:start;position:sticky;top:12px}
+  .figure .stage{height:calc(100vh - 98px);max-height:920px;min-height:520px}
+  .chips{flex-wrap:wrap}
+}
+input[type=search]{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  border-radius:14px;padding:13px 16px;font-size:14px;outline:none;box-shadow:var(--shadow)}
+input[type=search]::placeholder{color:var(--ink2)}
+input[type=search]:focus{border-color:var(--accent)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--ink2);
   border-radius:999px;padding:6px 11px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px}
-.chip.on{color:#fff;border-color:transparent}
+.chip:hover{border-color:var(--accent)}
+.chip.on{background:var(--ink);color:var(--bg);border-color:transparent;font-weight:600}
+.chip.on .dot{box-shadow:0 0 0 1.5px #fff}
 .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
-.stage{background:radial-gradient(ellipse at 50% 38%,#fff 0%,#eef0f2 55%,#d5d8dc 100%);
-  border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;height:min(76vh,720px);min-height:430px}
+
+/* ---------- escenario ---------- */
+.stage{background:radial-gradient(ellipse at 50% 40%,var(--stage1) 0%,var(--stage2) 55%,var(--stage3) 100%);
+  border:1px solid var(--line);border-radius:22px;overflow:hidden;position:relative;height:min(78vh,720px);min-height:460px;box-shadow:var(--shadow)}
 .stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 .stage canvas:active{cursor:grabbing}
-.tools,.zones{position:absolute;top:8px;display:flex;flex-direction:column;gap:6px}
-.tools{right:8px}.zones{left:8px}
-.stage button{background:#fffd;border:1px solid #c9ccd1;color:#2b2623;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;padding:7px 10px}
-.stage button.on{background:var(--accent);border-color:var(--accent);color:#fff}
-.tag{position:absolute;pointer-events:none;background:#1b1815;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:7px;transform:translate(10px,-130%);white-space:nowrap;display:none}
-.hint{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;color:#5d5752;pointer-events:none}
-.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#4a4440;font-size:13px;text-align:center;padding:20px 80px;pointer-events:none}
-.card{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-.card.empty{color:var(--ink2);font-size:13px;text-align:center;padding:22px 14px}
-.code{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:7px;color:#fff}
-.hz{font-size:30px;font-weight:600;margin:10px 0 2px;line-height:1.15;
-  font-family:"Noto Serif SC","Songti SC",serif;letter-spacing:2px}
-.py{font-size:14px;color:var(--gold);font-style:italic;margin:0}
-.es{font-size:17px;font-weight:600;margin:8px 0 0}
-.meta{font-size:12px;color:var(--ink2);margin:8px 0 0;line-height:1.5}
-.ind{margin:11px 0 0;padding-top:11px;border-top:1px solid var(--line);font-size:13.5px;line-height:1.6}
-.ind b{color:var(--gold);font-weight:600;font-size:11px;letter-spacing:.8px;display:block;margin-bottom:4px;text-transform:uppercase}
-.list{margin-top:10px;max-height:290px;overflow-y:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
-.item{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #2a241f;cursor:pointer}
+.bar{position:absolute;display:flex;gap:2px;padding:4px;background:var(--glass);border:1px solid var(--line);border-radius:14px;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:var(--shadow)}
+.zones{top:10px;left:10px;flex-direction:column}
+.tools{top:10px;right:10px;flex-direction:column}
+.views{bottom:10px;left:50%;transform:translateX(-50%);white-space:nowrap}
+.bar button{background:none;border:0;color:var(--ink);border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;padding:8px 11px}
+.bar button:hover{background:var(--panel2)}
+.bar button.on{background:var(--accent);color:var(--on-accent)}
+.tools hr{width:70%;border:0;border-top:1px solid var(--line);margin:3px auto}
+.tag{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;font-weight:700;padding:4px 10px;border-radius:9px;transform:translate(10px,-130%);white-space:nowrap;display:none;box-shadow:var(--shadow)}
+.hint{position:absolute;bottom:62px;left:0;right:0;text-align:center;font-size:11px;color:var(--ink2);pointer-events:none;transition:opacity .6s}
+.stage.used .hint{opacity:0}
+.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ink2);font-size:13px;text-align:center;padding:20px 80px;pointer-events:none}
+
+/* ---------- ficha y lista ---------- */
+.count{font-size:11.5px;color:var(--ink2);padding:0 4px 6px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 18px;box-shadow:var(--shadow)}
+.card.empty{color:var(--ink2);font-size:13px;text-align:center;padding:22px 14px;border-style:dashed;box-shadow:none}
+.code{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:8px;color:#fff}
+.hz{font-size:36px;font-weight:600;margin:10px 0 2px;line-height:1.15;
+  font-family:"Noto Serif SC","Songti SC",SimSun,serif;letter-spacing:3px}
+.py{font-size:15px;color:var(--gold);font-style:italic;margin:0}
+.es{font:600 19px/1.3 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;margin:8px 0 0}
+.meta{font-size:12px;color:var(--ink2);margin:8px 0 0;line-height:1.55}
+.ind{margin:12px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13.5px;line-height:1.65}
+.ind b{color:var(--gold);font-weight:700;font-size:10.5px;letter-spacing:1px;display:block;margin-bottom:5px;text-transform:uppercase}
+.list{margin-top:10px;max-height:340px;overflow-y:auto;border:1px solid var(--line);border-radius:18px;background:var(--panel);box-shadow:var(--shadow);scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.item{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
 .item:last-child{border-bottom:0}
-.item:active{background:var(--panel2)}
-.item .c{font-size:11px;font-weight:700;color:#fff;border-radius:6px;padding:3px 7px;flex:0 0 auto;min-width:46px;text-align:center}
+.item:hover,.item:active{background:var(--panel2)}
+.item .c{font-size:11px;font-weight:700;color:#fff;border-radius:7px;padding:4px 7px;flex:0 0 auto;min-width:48px;text-align:center}
 .item .t{flex:1;min-width:0}
 .item .t1{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item .t1 em{font-style:normal;font-family:"Noto Serif SC",serif;color:var(--gold)}
+.item .t1 em{font-style:normal;font-family:"Noto Serif SC",SimSun,serif;color:var(--gold)}
 .item .t2{font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-align:center}
-.count{font-size:11px;color:var(--ink2);padding:2px 4px 0}
+footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-height:1.6;padding:0 16px 40px;text-align:center}
+
+@media (max-width:520px){
+  h1{font-size:18px} h1 span{display:block;font-size:13px}
+  .themes{width:100%} .themes button{flex:1;justify-content:center}
+  .bar button{padding:8px 8px;font-size:11.5px}
+  .hint{font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){ .hint{transition:none} }
 </style>
 </head>
 <body>
 <header>
-  <h1>Mapa de Acupuntura <span>· 针灸穴位图</span></h1>
-  <p class="sub">14 canales · <span id="total">103</span> puntos · nombre chino, pinyin y traducción al español</p>
+  <div class="brand">
+    <div class="seal" aria-hidden="true">穴</div>
+    <div>
+      <h1>Mapa de Acupuntura <span>针灸穴位图</span></h1>
+      <p class="sub">14 canales · <span id="total">103</span> puntos · chino, pinyin y español</p>
+    </div>
+  </div>
+  <div class="themes" id="themes" role="group" aria-label="Modo de color">
+    <button data-t="normal" aria-pressed="true"><i style="--sw:#f1e5cc"></i>Normal</button>
+    <button data-t="rosado" aria-pressed="false"><i style="--sw:#f2a7bc"></i>Cerezo</button>
+    <button data-t="nocturno" aria-pressed="false"><i style="--sw:#23283d"></i>Nocturno</button>
+  </div>
 </header>
 
-<div class="wrap">
-  <div class="row">
-    <input type="search" id="q" placeholder="Buscar: 合谷, Hegu, IG4, valle…" autocomplete="off">
+<main class="wrap">
+  <div class="find">
+    <input type="search" id="q" placeholder="Buscar: 合谷, Hegu, IG4, valle…" autocomplete="off" aria-label="Buscar punto">
+    <div class="chips" id="chips"></div>
   </div>
 
-  <div class="chips" id="chips"></div>
-
+  <div class="figure">
   <div class="stage" id="stage">
     <div class="msg" id="msg">Modelando el muñeco…</div>
-    <div class="zones" id="zones">
+    <div class="bar zones" id="zones">
       <button data-z="all" class="on">Cuerpo</button><button data-z="head">Cabeza</button>
       <button data-z="hand">Mano</button><button data-z="foot">Pie</button>
     </div>
-    <div class="tools" id="views">
-      <button data-a="0">Frente</button><button data-a="180">Dorso</button>
-      <button data-a="90">Lado izq.</button><button data-a="-90">Lado der.</button>
+    <div class="bar tools">
       <button id="zin" aria-label="Acercar">＋</button><button id="zout" aria-label="Alejar">－</button>
+      <hr>
       <button id="lines" class="on">Líneas</button>
       <button id="names" class="on">Nombres</button>
+    </div>
+    <div class="bar views" id="views">
+      <button data-a="0">Frente</button><button data-a="180">Dorso</button>
+      <button data-a="90">Lado izq.</button><button data-a="-90">Lado der.</button>
     </div>
     <div class="tag" id="tag"></div>
     <div class="hint">Arrastra para girar · acerca con la rueda o dos dedos</div>
   </div>
 
-  <div class="count" id="count"></div>
-  <div class="card empty" id="card">Toca un punto del mapa o búscalo por nombre.</div>
-  <div class="list" id="list"></div>
+  </div>
+
+  <div class="info">
+    <div class="count" id="count"></div>
+    <div class="card empty" id="card">Toca un punto del mapa o búscalo por nombre.</div>
+    <div class="list" id="list"></div>
+  </div>
+</main>
 
   <footer>
     Cuerpo 3D basado en la malla de <a href="https://github.com/makehumancommunity/makehuman" style="color:inherit">MakeHuman</a> (CC0).<br>
@@ -106,7 +190,6 @@ footer{font-size:11px;color:#6f645c;line-height:1.5;padding:14px 4px 0;text-alig
     Las posiciones son esquemáticas y orientativas: sirven para ubicar el canal,
     no reemplazan la localización anatómica por cun ni los textos de referencia.
   </footer>
-</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="modelo.js"></script>
@@ -590,7 +673,7 @@ function labelGeometry(l){
 }
 
 function createScene(){
-  const stage=$('stage'), none={update(){},focus(){}};
+  const stage=$('stage'), none={update(){},focus(){},theme(){}};
   const fail=t=>{ $('msg').textContent=t+' La búsqueda y las fichas siguen disponibles.'; return none; };
   if(!window.THREE) return fail('No se pudo cargar el motor 3D. Revisa tu conexión y recarga.');
   let renderer;
@@ -604,6 +687,7 @@ function createScene(){
   const sun=new THREE.DirectionalLight(0xffffff,.36); sun.position.set(.5,.7,1); camera.add(sun); scene.add(camera);
 
   let body=null;
+  const skins={};
   const marks=[], lines=new THREE.Group(), names=new THREE.Group(), chans={};
   const V=p=>new THREE.Vector3(...world(p));
   const mirror=p=>[-p[0],p[1],p[2]];
@@ -614,7 +698,7 @@ function createScene(){
     g.setAttribute('position',new THREE.Float32BufferAttribute(m.v.flatMap(world),3));
     g.setIndex(m.tris.flat());
     g.computeVertexNormals();
-    const ivory=new THREE.MeshPhongMaterial({color:0xeadcc0,specular:0x1c1c1c,shininess:30,side:THREE.DoubleSide});
+    const ivory=skins.body=new THREE.MeshPhongMaterial({specular:0x1c1c1c,shininess:30,side:THREE.DoubleSide});
     body=new THREE.Mesh(g,ivory);
     model.add(body);
     /* la malla base trae las cuencas abiertas: se cierran con dos esferas */
@@ -622,8 +706,9 @@ function createScene(){
       const eye=new THREE.Mesh(new THREE.SphereGeometry(5.6,24,16),ivory);
       eye.position.set(...world(MALLA.j[k])); model.add(eye);
     }
-    const base=new THREE.Mesh(new THREE.CylinderGeometry(98,106,20,72),new THREE.MeshPhongMaterial({color:0xfaf8f4,shininess:60}));
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(98,106,20,72),skins.pedestal=new THREE.MeshPhongMaterial({specular:0x333333,shininess:40}));
     base.position.y=385-746; model.add(base);
+    theme();
 
     for(const p of PTS){
       const at=surface(POS[code(p)]);
@@ -671,7 +756,7 @@ function createScene(){
   }
 
   /* ----- cámara y gestos ----- */
-  const cur={a:25,x:0,y:-8,z:1}, goal={a:25,x:0,y:-8,z:1};
+  const cur={a:25,x:0,y:-52,z:1}, goal={a:25,x:0,y:-52,z:1};
   let dirty=true;
   function resize(){
     const w=stage.clientWidth,h=stage.clientHeight;
@@ -679,7 +764,7 @@ function createScene(){
   }
   new ResizeObserver(resize).observe(stage); resize();
   const half=()=>Math.tan(camera.fov*Math.PI/360);
-  const fitDist=()=>Math.max(810/2, 300/2/camera.aspect)/half();
+  const fitDist=()=>Math.max(920/2, 330/2/camera.aspect)/half();
   function step(){
     let moving=false;
     for(const k in goal){
@@ -732,7 +817,8 @@ function createScene(){
     if(hit) pick(hit[1].p.id,false);
   }
   const mark=z=>[...$('zones').children].forEach(b=>b.classList.toggle('on',b.dataset.z===z));
-  const zoom=f=>{ goal.z=clamp(goal.z*f,1,9); if(goal.z===1){ goal.x=0; goal.y=-8; } mark(null); dirty=true; };
+  const zoom=f=>{ goal.z=clamp(goal.z*f,1,9); if(goal.z===1){ goal.x=0; goal.y=-52; } mark(null); dirty=true; };
+  stage.addEventListener('pointerdown',()=>stage.classList.add('used'),{once:true});
   const el=renderer.domElement, down=new Map();
   let moved=0, pinch=0;
   el.addEventListener('pointerdown',e=>{ el.setPointerCapture(e.pointerId); if(!down.size) moved=0; down.set(e.pointerId,[e.clientX,e.clientY]); pinch=0; });
@@ -767,7 +853,7 @@ function createScene(){
     const r=angle*Math.PI/180, c=world(J(joint));
     return [angle, c[0]*Math.cos(r)-c[2]*Math.sin(r), c[1]+dy, zoomTo];
   };
-  const ZONES={all:()=>[0,0,-8,1],head:()=>[25,0,318,4.6],hand:()=>aim(72,'finger-3-1',5),foot:()=>aim(40,'foot-1',4.4,8)};
+  const ZONES={all:()=>[0,0,-52,1],head:()=>[25,0,318,4.6],hand:()=>aim(72,'finger-3-1',5),foot:()=>aim(40,'foot-1',4.4,8)};
   $('names').onclick=e=>{ names.visible=!names.visible; e.target.classList.toggle('on',names.visible); dirty=true; };
   $('zones').addEventListener('click',e=>{
     const b=e.target.closest('[data-z]'); if(!b) return;
@@ -775,6 +861,12 @@ function createScene(){
     turnTo(a); Object.assign(goal,{x,y,z}); mark(b.dataset.z);
   });
 
+  /* los colores 3D salen de las variables CSS del modo activo */
+  function theme(){
+    const css=getComputedStyle(document.documentElement);
+    for(const k in skins) skins[k].color.set(css.getPropertyValue('--'+k+'3d').trim());
+    dirty=true;
+  }
   function update(){
     for(const m of marks){
       const on=(!filter||m.p.mer===filter)&&matches(m.p);
@@ -800,7 +892,7 @@ function createScene(){
   /* para depurar */
   window.__scene={marks,step,goal,cur,redraw(){ Object.assign(cur,goal); dirty=true; step(); }};
   setTimeout(()=>{ build(); frame(); },30);
-  return {update,focus};
+  return {update,focus,theme};
 }
 
 /* ---------- estado ---------- */
@@ -820,7 +912,7 @@ $('chips').addEventListener('click',e=>{
   [...$('chips').children].forEach(c=>{
     const on = c===b; c.classList.toggle('on',on);
     c.style.background = on && filter ? M[filter].c : '';
-    c.style.color = on ? '#fff' : '';
+    c.style.color = on && filter ? '#fff' : '';
   });
   render();
 });
@@ -850,7 +942,7 @@ function render(){
         <div class="t1"><em>${p.hz}</em> · ${p.py}</div>
         <div class="t2">${p.es} — ${p.view==='f'?'anterior':'posterior'}</div>
       </div>
-    </div>`).join('') : `<div class="item" style="color:#a9a09a">Sin resultados.</div>`;
+    </div>`).join('') : `<div class="item" style="color:var(--ink2)">Sin resultados.</div>`;
 
   // ficha
   if(sel==null){
@@ -880,6 +972,19 @@ $('list').addEventListener('click',e=>{
 });
 
 const scene3d = createScene();
+function setTheme(name){
+  const root=document.documentElement;
+  if(name==='normal') delete root.dataset.theme; else root.dataset.theme=name;
+  for(const b of $('themes').children) b.setAttribute('aria-pressed',b.dataset.t===name);
+  document.querySelector('meta[name="theme-color"]').content=getComputedStyle(root).getPropertyValue('--bg').trim();
+  scene3d.theme();
+}
+$('themes').addEventListener('click',e=>{
+  const b=e.target.closest('[data-t]'); if(!b) return;
+  setTheme(b.dataset.t);
+  try{ localStorage.setItem('mapa-tema',b.dataset.t); }catch(err){}
+});
+setTheme(document.documentElement.dataset.theme||'normal');
 render();
 </script>
 </body>
