@@ -817,6 +817,7 @@ function createScene(){
   const MAX_TILT=85;
   let pedestal=null;
   let dirty=true;
+  let pivot=null; /* punto enfocado: al arrastrar, la vista gira a su alrededor */
   function resize(){
     const w=stage.clientWidth,h=stage.clientHeight;
     renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); dirty=true;
@@ -877,10 +878,10 @@ function createScene(){
       if(d<16) near.push([d,m]);
     }
     const hit=near.sort((a,b)=>a[0]-b[0]).find(n=>seen(n[1]));
-    if(hit) pick(hit[1].p.id,false);
+    if(hit) pick(hit[1].p.id,true,hit[1]);
   }
   const mark=z=>[...$('zones').children].forEach(b=>b.classList.toggle('on',b.dataset.z===z));
-  const zoom=f=>{ goal.z=clamp(goal.z*f,1,9); if(goal.z===1){ goal.x=0; goal.y=-52; goal.d=0; } mark(null); dirty=true; };
+  const zoom=f=>{ goal.z=clamp(goal.z*f,1,9); if(goal.z===1){ pivot=null; goal.x=0; goal.y=-52; goal.d=0; } mark(null); dirty=true; };
   stage.addEventListener('pointerdown',()=>stage.classList.add('used'),{once:true});
   const el=renderer.domElement, down=new Map();
   let moved=0, pinch=0;
@@ -901,8 +902,13 @@ function createScene(){
     if(e.shiftKey || (e.buttons&6)){ pan(dy); dirty=true; return; }
     goal.a=cur.a=cur.a-dx*.5;
     goal.t=cur.t=clamp(cur.t+dy*.45,-MAX_TILT,MAX_TILT);
-    /* al girar, el eje de la vista vuelve al centro del muñeco */
-    if(Math.abs(dx)>0){ goal.x*=.9; goal.d*=.9; }
+    if(pivot){
+      /* con un punto enfocado, se mantiene a la vista mientras gira */
+      const [x,d]=turned(pivot,cur.a);
+      goal.x=cur.x=x; goal.d=cur.d=d;
+    }
+    /* sin punto enfocado, el eje de la vista vuelve al centro del muñeco */
+    else if(Math.abs(dx)>0){ goal.x*=.9; goal.d*=.9; }
     dirty=true;
   });
   const up=e=>{
@@ -912,11 +918,13 @@ function createScene(){
   };
   el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up);
   el.addEventListener('wheel',e=>{ e.preventDefault(); zoom(Math.exp(-e.deltaY*.0015)); },{passive:false});
+  /* posición horizontal de un punto del muñeco cuando está girado a grados */
+  const turned=(p,a)=>{ const r=a*Math.PI/180; return [p.x*Math.cos(r)-p.z*Math.sin(r), p.x*Math.sin(r)+p.z*Math.cos(r)]; };
   const turnTo=a=>{ goal.a=a+360*Math.round((cur.a-a)/360); };
-  $('views').addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(b){ turnTo(+b.dataset.a); Object.assign(goal,{t:0,x:0,d:0}); } });
+  $('views').addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(b){ pivot=null; turnTo(+b.dataset.a); Object.assign(goal,{t:0,x:0,d:0}); } });
   /* mira un lugar del cuerpo desde arriba o desde abajo */
   const lookFrom=(point,tilt,zoomTo)=>{
-    turnTo(0); Object.assign(goal,{t:tilt,x:point[0],y:point[1],d:point[2],z:zoomTo}); mark(null); dirty=true;
+    pivot=null; turnTo(0); Object.assign(goal,{t:tilt,x:point[0],y:point[1],d:point[2],z:zoomTo}); mark(null); dirty=true;
   };
   $('top').onclick=()=>{ const h=world(J('head-2')); lookFrom([0,345,h[2]],80,4); };
   $('bottom').onclick=()=>{ const h=world(J('upper-leg')); lookFrom([0,h[1]-30,h[2]+10],-55,3.6); };
@@ -932,7 +940,7 @@ function createScene(){
   $('zones').addEventListener('click',e=>{
     const b=e.target.closest('[data-z]'); if(!b) return;
     const [a,x,y,z]=ZONES[b.dataset.z]();
-    turnTo(a); Object.assign(goal,{t:0,x,y,d:0,z}); mark(b.dataset.z);
+    pivot=null; turnTo(a); Object.assign(goal,{t:0,x,y,d:0,z}); mark(b.dataset.z);
   });
 
   /* los colores 3D salen de las variables CSS del modo activo */
@@ -953,17 +961,20 @@ function createScene(){
     dirty=true;
   }
   /* gira el muñeco para mostrar el punto y se acerca a él */
-  function focus(id){
-    const m=marks.find(m=>m.p.id===id&&m.left); if(!m) return;
+  function focus(id,tapped){
+    const m=tapped||marks.find(m=>m.p.id===id&&m.left); if(!m) return;
     const n=m.n, p=m.dot.position;
     turnTo(Math.hypot(n.x,n.z)>.25 ? Math.atan2(n.x,n.z)*180/Math.PI : 0);
     const r=goal.a*Math.PI/180;
     const lift=Math.asin(clamp(n.y,-1,1))*180/Math.PI;
     goal.t=Math.abs(lift)>35 ? clamp(lift,-75,80) : 0;
-    goal.x=p.x*Math.cos(r)-p.z*Math.sin(r);
-    goal.d=p.x*Math.sin(r)+p.z*Math.cos(r);
+    pivot=p;
+    [goal.x,goal.d]=turned(p,goal.a);
     goal.y=clamp(p.y,-355,345);
-    goal.z=(p.y>270||p.y<-300)?4.2:3;
+    /* cabeza, manos y pies tienen puntos muy juntos: más cerca. Nunca aleja si ya estaba más cerca */
+    const hand=Math.hypot(...subv([Math.abs(m.q[0]),m.q[1],m.q[2]],J('finger-3-1')))<62;
+    const near=(hand||p.y>270||p.y<-300)?5.4:4;
+    goal.z=Math.max(near,goal.z);
     mark(null); dirty=true;
   }
   /* para depurar */
@@ -1048,9 +1059,9 @@ function render(){
   }
 }
 
-function pick(id, turn){
+function pick(id, turn, mark){
   sel = id; render();
-  if(turn) scene3d.focus(id);
+  if(turn) scene3d.focus(id,mark);
 }
 $('list').addEventListener('click',e=>{
   const i=e.target.closest('.item'); if(!i||!i.dataset.id) return;
