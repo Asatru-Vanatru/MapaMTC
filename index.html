@@ -70,19 +70,30 @@ h1 span{color:var(--gold);font-weight:400;font-size:16px;white-space:nowrap}
     grid-template-areas:"figure find" "figure info"}
   .figure{align-self:start;position:sticky;top:12px}
   .figure .stage{height:calc(100vh - 98px);max-height:920px;min-height:520px}
-  .chips{flex-wrap:wrap}
 }
 input[type=search]{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--ink);
   border-radius:14px;padding:13px 16px;font-size:14px;outline:none;box-shadow:var(--shadow)}
 input[type=search]::placeholder{color:var(--ink2)}
 input[type=search]:focus{border-color:var(--accent)}
-.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--ink2);
-  border-radius:999px;padding:6px 11px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px}
-.chip:hover{border-color:var(--accent)}
-.chip.on{background:var(--ink);color:var(--bg);border-color:transparent;font-weight:600}
-.chip.on .dot{box-shadow:0 0 0 1.5px #fff}
+.chanpick{position:relative;margin-top:8px}
+.chan-toggle{display:flex;align-items:center;gap:10px;width:100%;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  border-radius:14px;padding:11px 16px;font-size:14px;text-align:left;cursor:pointer;box-shadow:var(--shadow)}
+.chan-toggle:hover,.chan-toggle[aria-expanded="true"]{border-color:var(--accent)}
+.chan-toggle .dot{width:11px;height:11px}
+.chan-toggle .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chan-toggle b{color:var(--ink2);font-size:11px;font-weight:400;transition:transform .2s}
+.chan-toggle[aria-expanded="true"] b{transform:rotate(180deg)}
+.chan-menu{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;max-height:min(420px,60vh);overflow-y:auto;overscroll-behavior:contain;
+  padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.chan-menu[hidden]{display:none}
+.opt{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:7px 10px;background:none;border:0;border-radius:10px;
+  color:var(--ink);font-size:13.5px;text-align:left;cursor:pointer}
+.opt:hover{background:var(--panel2)}
+.opt[aria-pressed="true"]{background:var(--panel2);box-shadow:inset 0 0 0 1.5px var(--accent);font-weight:600}
+.opt .k{flex:0 0 30px;color:var(--ink2);font-size:11px;font-weight:700}
+.opt .name{flex:1;min-width:0}
+.opt .z{color:var(--gold);font:400 13px "Noto Serif SC","Songti SC",SimSun,serif;white-space:nowrap}
+.dot.all{background:conic-gradient(#d94f3d,#d9a84e,#5f9e73,#4a7fb5,#8f7ac4,#d94f3d)}
 .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
 
 /* ---------- escenario ---------- */
@@ -181,7 +192,12 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
 <main class="wrap">
   <div class="find">
     <input type="search" id="q" placeholder="Buscar: 合谷, Hegu, IG4, valle…" autocomplete="off" aria-label="Buscar punto">
-    <div class="chips" id="chips"></div>
+    <div class="chanpick" id="chanpick">
+      <button class="chan-toggle" id="chanBtn" aria-expanded="false" aria-controls="chips">
+        <span class="dot all" id="chanDot"></span><span class="name" id="chanName">Todos los canales</span><b aria-hidden="true">▼</b>
+      </button>
+      <div class="chan-menu" id="chips" role="group" aria-label="Filtrar por canal" hidden></div>
+    </div>
   </div>
 
   <div class="figure">
@@ -962,19 +978,28 @@ const $ = id => document.getElementById(id);
 
 $('total').textContent = PTS.length;
 
-/* chips de canal */
-$('chips').innerHTML = `<button class="chip on" data-m="">Todos</button>` +
-  Object.keys(M).map(k=>`<button class="chip" data-m="${k}" style="--mc:${M[k].c}">
-    <span class="dot" style="background:${M[k].c}"></span>${k} · ${M[k].es}</button>`).join('');
+/* menú desplegable de canales */
+const option=(k,dot,name,hz)=>`<button class="opt" data-m="${k}" aria-pressed="${!k}">${dot}<span class="k">${k}</span><span class="name">${name}</span><span class="z" lang="zh">${hz}</span></button>`;
+$('chips').innerHTML = option('','<span class="dot all"></span>','Todos los canales','') +
+  Object.keys(M).map(k=>option(k,`<span class="dot" style="background:${M[k].c}"></span>`,M[k].es,M[k].hz)).join('');
+
+function openChans(open){
+  $('chips').hidden=!open; $('chanBtn').setAttribute('aria-expanded',open);
+  if(open){ const o=$('chips').querySelector('[aria-pressed="true"]'); $('chips').scrollTop=o.offsetTop-80; o.focus({preventScroll:true}); }
+}
+$('chanBtn').onclick=()=>openChans($('chips').hidden);
+document.addEventListener('pointerdown',e=>{ if(!$('chanpick').contains(e.target)) openChans(false); });
+$('chanpick').addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('chips').hidden){ openChans(false); $('chanBtn').focus(); } });
+$('chanpick').addEventListener('focusout',e=>{ if(e.relatedTarget&&!$('chanpick').contains(e.relatedTarget)) openChans(false); });
 
 $('chips').addEventListener('click',e=>{
-  const b = e.target.closest('.chip'); if(!b) return;
+  const b = e.target.closest('.opt'); if(!b) return;
   filter = b.dataset.m || null;
-  [...$('chips').children].forEach(c=>{
-    const on = c===b; c.classList.toggle('on',on);
-    c.style.background = on && filter ? M[filter].c : '';
-    c.style.color = on && filter ? '#fff' : '';
-  });
+  for(const o of $('chips').children) o.setAttribute('aria-pressed',o===b);
+  $('chanDot').className = filter ? 'dot' : 'dot all';
+  $('chanDot').style.background = filter ? M[filter].c : '';
+  $('chanName').textContent = filter ? `${filter} · ${M[filter].es}` : 'Todos los canales';
+  openChans(false); $('chanBtn').focus({preventScroll:true});
   render();
 });
 
