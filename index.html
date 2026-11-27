@@ -43,7 +43,7 @@ body{min-height:100vh;background:radial-gradient(1100px 560px at 50% -120px,var(
 button,input{font-family:inherit}
 button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-header{max-width:1180px;margin:0 auto;padding:16px 14px 4px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+header{max-width:1180px;margin:0 auto;padding:16px 14px 4px;display:flex;gap:12px;align-items:center;justify-content:space-between}
 .brand{display:flex;gap:12px;align-items:center;min-width:0}
 .seal{flex:0 0 auto;width:46px;height:46px;border-radius:11px;background:var(--accent);color:var(--on-accent);
   display:flex;align-items:center;justify-content:center;font:600 27px "Noto Serif SC","Songti SC",SimSun,serif;
@@ -51,11 +51,15 @@ header{max-width:1180px;margin:0 auto;padding:16px 14px 4px;display:flex;flex-wr
 h1{margin:0;font:600 21px/1.2 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:.2px}
 h1 span{color:var(--gold);font-weight:400;font-size:16px;white-space:nowrap}
 .sub{margin:3px 0 0;font-size:12px;color:var(--ink2)}
-.themes{display:flex;gap:2px;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:999px;box-shadow:var(--shadow)}
-.themes button{display:flex;align-items:center;gap:6px;border:0;background:none;color:var(--ink2);border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
-.themes button i{width:12px;height:12px;border-radius:50%;border:1px solid #0003;background:var(--sw)}
-.themes button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
-.themes button[aria-pressed="true"] i{border-color:#fffa}
+.theme-picker{position:relative;flex:0 0 auto}
+.theme-picker svg{display:block;width:20px;height:20px}
+.theme-toggle{display:flex;align-items:center;gap:3px;height:36px;padding:0 8px 0 10px;background:var(--panel);border:1px solid var(--line);border-radius:999px;color:var(--ink2);cursor:pointer;box-shadow:var(--shadow)}
+.theme-toggle b{font-size:10px;font-weight:400}
+.themes{position:absolute;top:calc(100% + 6px);right:0;z-index:20;display:flex;flex-direction:column;gap:3px;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;box-shadow:var(--shadow)}
+.themes[hidden]{display:none}
+.themes button{display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:2px solid transparent;border-radius:50%;background:none;cursor:pointer}
+.themes button:hover{background:var(--panel2)}
+.themes button[aria-pressed="true"]{border-color:var(--accent);background:var(--panel2)}
 
 /* ---------- distribución ---------- */
 .wrap{padding:10px 12px 40px;max-width:640px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;
@@ -125,10 +129,29 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
 
 @media (max-width:520px){
   h1{font-size:18px} h1 span{display:block;font-size:13px}
-  .themes{width:100%} .themes button{flex:1;justify-content:center}
+  .seal{width:40px;height:40px;font-size:23px}
   .bar button{padding:8px 8px;font-size:11.5px}
   .views button{padding:8px 4px;font-size:11px}
   .hint{font-size:10px}
+}
+.for-touch{display:none}
+/* pantallas táctiles: ayuda corta, solo con gestos */
+@media (pointer:coarse){
+  .for-mouse{display:none}
+  .for-touch{display:inline-block;padding:4px 10px;background:var(--glass);border-radius:999px}
+}
+/* celular vertical: queda un tramo libre bajo el mapa para deslizar la página */
+@media (max-width:520px) and (orientation:portrait){
+  .stage{height:72vh;height:72svh;min-height:400px}
+}
+/* celular horizontal: el mapa cabe en la pantalla y los márgenes sirven para deslizar */
+@media (orientation:landscape) and (max-height:520px){
+  .wrap{padding-left:max(56px,env(safe-area-inset-left));padding-right:max(56px,env(safe-area-inset-right))}
+  .figure{position:static}
+  .figure .stage,.stage{height:calc(100vh - 16px);height:calc(100svh - 16px);min-height:0;max-height:none;scroll-margin:8px}
+  .bar button{padding:7px 9px;font-size:11.5px}
+  .zones,.tools{top:8px} .views{bottom:8px}
+  .hint{bottom:52px}
 }
 @media (prefers-reduced-motion:reduce){ .hint{transition:none} }
 .credits{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
@@ -143,10 +166,15 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
       <p class="sub">14 canales · <span id="total">103</span> puntos · chino, pinyin y español</p>
     </div>
   </div>
-  <div class="themes" id="themes" role="group" aria-label="Modo de color">
-    <button data-t="normal" aria-pressed="true"><i style="--sw:#f1e5cc"></i>Normal</button>
-    <button data-t="rosado" aria-pressed="false"><i style="--sw:#f2a7bc"></i>Cerezo</button>
-    <button data-t="nocturno" aria-pressed="false"><i style="--sw:#23283d"></i>Nocturno</button>
+  <div class="theme-picker" id="picker">
+    <button class="theme-toggle" id="themeBtn" aria-expanded="false" aria-controls="themes" aria-label="Cambiar modo de color" title="Cambiar modo">
+      <span id="themeIcon"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="#e29a12" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5" fill="#f6bd3a"/><path d="M12 2v2.5M12 19.500V22M2 12h2.500M19.500 12H22M4.900 4.900l1.800 1.800M17.300 17.300l1.800 1.800M4.900 19.100l1.800-1.800M17.300 6.700l1.800-1.800"/></g></svg></span><b aria-hidden="true">▾</b>
+    </button>
+    <div class="themes" id="themes" role="group" aria-label="Modo de color" hidden>
+      <button data-t="normal" aria-pressed="true" aria-label="Modo Normal" title="Normal"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="#e29a12" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5" fill="#f6bd3a"/><path d="M12 2v2.5M12 19.500V22M2 12h2.500M19.500 12H22M4.900 4.900l1.800 1.800M17.300 17.300l1.800 1.800M4.900 19.100l1.800-1.800M17.300 6.700l1.800-1.800"/></g></svg></button>
+      <button data-t="rosado" aria-pressed="false" aria-label="Modo Cerezo" title="Cerezo"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="#f08cab" stroke="#c2507a" stroke-width=".8" stroke-linejoin="round"><path d="M12 12C8.2 9.8 7.4 5.6 9.6 2.8L12 4.6L14.4 2.8C16.6 5.6 15.8 9.8 12 12Z" transform="rotate(0 12 12)"/><path d="M12 12C8.2 9.8 7.4 5.6 9.6 2.8L12 4.6L14.4 2.8C16.6 5.6 15.8 9.8 12 12Z" transform="rotate(72 12 12)"/><path d="M12 12C8.2 9.8 7.4 5.6 9.6 2.8L12 4.6L14.4 2.8C16.6 5.6 15.8 9.8 12 12Z" transform="rotate(144 12 12)"/><path d="M12 12C8.2 9.8 7.4 5.6 9.6 2.8L12 4.6L14.4 2.8C16.6 5.6 15.8 9.8 12 12Z" transform="rotate(216 12 12)"/><path d="M12 12C8.2 9.8 7.4 5.6 9.6 2.8L12 4.6L14.4 2.8C16.6 5.6 15.8 9.8 12 12Z" transform="rotate(288 12 12)"/></g><circle cx="12" cy="12" r="2.2" fill="#ffe08a"/></svg></button>
+      <button data-t="nocturno" aria-pressed="false" aria-label="Modo Nocturno" title="Nocturno"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.500 14.800A9 9 0 0 1 9.200 3.500a9 9 0 1 0 11.300 11.300z" fill="#e5bd6e" stroke="#a57f2c" stroke-width="1.300" stroke-linejoin="round"/></svg></button>
+    </div>
   </div>
 </header>
 
@@ -175,7 +203,10 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
       <button id="top">Arriba</button><button id="bottom">Abajo</button>
     </div>
     <div class="tag" id="tag"></div>
-    <div class="hint">Arrastra para girar e inclinar · rueda o dos dedos para acercar · Shift o dos dedos para desplazar</div>
+    <div class="hint">
+      <span class="for-mouse">Arrastra para girar e inclinar · rueda para acercar · Shift para desplazar</span>
+      <span class="for-touch">Un dedo gira · dos acercan y mueven</span>
+    </div>
   </div>
 
   </div>
@@ -1014,11 +1045,16 @@ function setTheme(name){
   document.querySelector('meta[name="theme-color"]').content=getComputedStyle(root).getPropertyValue('--bg').trim();
   const ICON={normal:['#a93a28','#fff6e4'],rosado:['#b83863','#ffe9ef'],nocturno:['#1c2136','#e5bd6e']};
   favicon(...ICON[name]);
+  $('themeIcon').innerHTML=$('themes').querySelector('[data-t="'+name+'"]').innerHTML;
   scene3d.theme();
 }
+function openThemes(open){ $('themes').hidden=!open; $('themeBtn').setAttribute('aria-expanded',open); }
+$('themeBtn').onclick=()=>openThemes($('themes').hidden);
+document.addEventListener('pointerdown',e=>{ if(!$('picker').contains(e.target)) openThemes(false); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('themes').hidden){ openThemes(false); $('themeBtn').focus(); } });
 $('themes').addEventListener('click',e=>{
   const b=e.target.closest('[data-t]'); if(!b) return;
-  setTheme(b.dataset.t);
+  setTheme(b.dataset.t); openThemes(false); $('themeBtn').focus({preventScroll:true});
   try{ localStorage.setItem('mapa-tema',b.dataset.t); }catch(err){}
 });
 setTheme(document.documentElement.dataset.theme||'normal');
