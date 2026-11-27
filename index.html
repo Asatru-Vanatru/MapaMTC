@@ -90,13 +90,13 @@ input[type=search]:focus{border-color:var(--accent)}
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:var(--shadow)}
 .zones{top:10px;left:10px;flex-direction:column}
 .tools{top:10px;right:10px;flex-direction:column}
-.views{bottom:10px;left:50%;transform:translateX(-50%);white-space:nowrap}
+.views{bottom:10px;left:50%;transform:translateX(-50%);white-space:nowrap;width:max-content;max-width:calc(100% - 20px);flex-wrap:wrap;justify-content:center}
 .bar button{background:none;border:0;color:var(--ink);border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;padding:8px 11px}
 .bar button:hover{background:var(--panel2)}
 .bar button.on{background:var(--accent);color:var(--on-accent)}
 .tools hr{width:70%;border:0;border-top:1px solid var(--line);margin:3px auto}
 .tag{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;font-weight:700;padding:4px 10px;border-radius:9px;transform:translate(10px,-130%);white-space:nowrap;display:none;box-shadow:var(--shadow)}
-.hint{position:absolute;bottom:62px;left:0;right:0;text-align:center;font-size:11px;color:var(--ink2);pointer-events:none;transition:opacity .6s}
+.hint{position:absolute;bottom:96px;left:0;right:0;padding:0 16px;text-align:center;font-size:11px;color:var(--ink2);pointer-events:none;transition:opacity .6s}
 .stage.used .hint{opacity:0}
 .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ink2);font-size:13px;text-align:center;padding:20px 80px;pointer-events:none}
 
@@ -127,6 +127,7 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
   h1{font-size:18px} h1 span{display:block;font-size:13px}
   .themes{width:100%} .themes button{flex:1;justify-content:center}
   .bar button{padding:8px 8px;font-size:11.5px}
+  .views button{padding:8px 4px;font-size:11px}
   .hint{font-size:10px}
 }
 @media (prefers-reduced-motion:reduce){ .hint{transition:none} }
@@ -171,9 +172,10 @@ footer{max-width:640px;margin:0 auto;font-size:11px;color:var(--ink2);line-heigh
     <div class="bar views" id="views">
       <button data-a="0">Frente</button><button data-a="180">Dorso</button>
       <button data-a="90">Lado izq.</button><button data-a="-90">Lado der.</button>
+      <button id="top">Arriba</button><button id="bottom">Abajo</button>
     </div>
     <div class="tag" id="tag"></div>
-    <div class="hint">Arrastra para girar · acerca con la rueda o dos dedos</div>
+    <div class="hint">Arrastra para girar e inclinar · rueda o dos dedos para acercar · Shift o dos dedos para desplazar</div>
   </div>
 
   </div>
@@ -691,7 +693,7 @@ function createScene(){
   stage.prepend(renderer.domElement);
   const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(24,1,10,9000), model=new THREE.Group();
   scene.add(model);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x8f8474,.68));
+  const sky=new THREE.HemisphereLight(0xffffff,0x8f8474,.68); scene.add(sky);
   const sun=new THREE.DirectionalLight(0xffffff,.36); sun.position.set(.5,.7,1); camera.add(sun); scene.add(camera);
 
   let body=null;
@@ -715,7 +717,7 @@ function createScene(){
       eye.position.set(...world(MALLA.j[k])); model.add(eye);
     }
     const base=new THREE.Mesh(new THREE.CylinderGeometry(98,106,20,72),skins.pedestal=new THREE.MeshPhongMaterial({specular:0x333333,shininess:40}));
-    base.position.y=385-746; model.add(base);
+    base.position.y=385-746; model.add(base); pedestal=base;
     theme();
 
     for(const p of PTS){
@@ -764,7 +766,9 @@ function createScene(){
   }
 
   /* ----- cámara y gestos ----- */
-  const cur={a:25,x:0,y:-52,z:1}, goal={a:25,x:0,y:-52,z:1};
+  const cur={a:25,t:0,x:0,y:-52,d:0,z:1}, goal={a:25,t:0,x:0,y:-52,d:0,z:1};
+  const MAX_TILT=85;
+  let pedestal=null;
   let dirty=true;
   function resize(){
     const w=stage.clientWidth,h=stage.clientHeight;
@@ -782,7 +786,11 @@ function createScene(){
     if(!moving && !dirty) return;
     dirty=false;
     model.rotation.y=-cur.a*Math.PI/180;
-    camera.position.set(cur.x,cur.y,fitDist()/cur.z); camera.lookAt(cur.x,cur.y,0);
+    const dist=fitDist()/cur.z, tilt=cur.t*Math.PI/180;
+    camera.position.set(cur.x, cur.y+dist*Math.sin(tilt), cur.d+dist*Math.cos(tilt));
+    camera.lookAt(cur.x,cur.y,cur.d);
+    sky.position.set(0,Math.cos(tilt),-Math.sin(tilt)); /* la luz acompaña a la cámara: desde abajo no queda en sombra */
+    if(pedestal) pedestal.visible=cur.t>-12; /* desde abajo taparía el cuerpo */
     const size=1/Math.pow(cur.z,.55);
     for(const m of marks) m.dot.scale.setScalar((m.p.id===sel?4.2:2.1)*size);
     scene.updateMatrixWorld(); camera.updateMatrixWorld();
@@ -825,10 +833,13 @@ function createScene(){
     if(hit) pick(hit[1].p.id,false);
   }
   const mark=z=>[...$('zones').children].forEach(b=>b.classList.toggle('on',b.dataset.z===z));
-  const zoom=f=>{ goal.z=clamp(goal.z*f,1,9); if(goal.z===1){ goal.x=0; goal.y=-52; } mark(null); dirty=true; };
+  const zoom=f=>{ goal.z=clamp(goal.z*f,1,9); if(goal.z===1){ goal.x=0; goal.y=-52; goal.d=0; } mark(null); dirty=true; };
   stage.addEventListener('pointerdown',()=>stage.classList.add('used'),{once:true});
   const el=renderer.domElement, down=new Map();
   let moved=0, pinch=0;
+  /* desplaza la vista hacia arriba o abajo (solo con acercamiento) */
+  const pan=dy=>{ if(goal.z>1.05) goal.y=cur.y=clamp(cur.y+dy*2*fitDist()/cur.z*half()/stage.clientHeight,-355,345); };
+  el.addEventListener('contextmenu',e=>e.preventDefault());
   el.addEventListener('pointerdown',e=>{ el.setPointerCapture(e.pointerId); if(!down.size) moved=0; down.set(e.pointerId,[e.clientX,e.clientY]); pinch=0; });
   el.addEventListener('pointermove',e=>{
     const prev=down.get(e.pointerId); if(!prev) return;
@@ -837,12 +848,14 @@ function createScene(){
     if(down.size===2){
       const [a,b]=[...down.values()], d=Math.hypot(a[0]-b[0],a[1]-b[1]);
       if(pinch) zoom(d/pinch);
-      pinch=d; moved+=20; return;
+      pan(dy/2); /* dos dedos: acercar y desplazar */
+      pinch=d; moved+=20; dirty=true; return;
     }
+    if(e.shiftKey || (e.buttons&6)){ pan(dy); dirty=true; return; }
     goal.a=cur.a=cur.a-dx*.5;
+    goal.t=cur.t=clamp(cur.t+dy*.45,-MAX_TILT,MAX_TILT);
     /* al girar, el eje de la vista vuelve al centro del muñeco */
-    if(Math.abs(dx)>0) goal.x*=.9;
-    if(goal.z>1.05) goal.y=cur.y=clamp(cur.y+dy*2*fitDist()/cur.z*half()/stage.clientHeight,-355,345);
+    if(Math.abs(dx)>0){ goal.x*=.9; goal.d*=.9; }
     dirty=true;
   });
   const up=e=>{
@@ -853,7 +866,13 @@ function createScene(){
   el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up);
   el.addEventListener('wheel',e=>{ e.preventDefault(); zoom(Math.exp(-e.deltaY*.0015)); },{passive:false});
   const turnTo=a=>{ goal.a=a+360*Math.round((cur.a-a)/360); };
-  $('views').addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(b){ turnTo(+b.dataset.a); goal.x=0; } });
+  $('views').addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(b){ turnTo(+b.dataset.a); Object.assign(goal,{t:0,x:0,d:0}); } });
+  /* mira un lugar del cuerpo desde arriba o desde abajo */
+  const lookFrom=(point,tilt,zoomTo)=>{
+    turnTo(0); Object.assign(goal,{t:tilt,x:point[0],y:point[1],d:point[2],z:zoomTo}); mark(null); dirty=true;
+  };
+  $('top').onclick=()=>{ const h=world(J('head-2')); lookFrom([0,345,h[2]],80,4); };
+  $('bottom').onclick=()=>{ const h=world(J('upper-leg')); lookFrom([0,h[1]-30,h[2]+10],-55,3.6); };
   $('zin').onclick=()=>zoom(1.5); $('zout').onclick=()=>zoom(1/1.5);
   $('lines').onclick=e=>{ lines.visible=!lines.visible; e.target.classList.toggle('on',lines.visible); dirty=true; };
   /* [ángulo, x, y, acercamiento]: centra en pantalla la articulación pedida */
@@ -866,7 +885,7 @@ function createScene(){
   $('zones').addEventListener('click',e=>{
     const b=e.target.closest('[data-z]'); if(!b) return;
     const [a,x,y,z]=ZONES[b.dataset.z]();
-    turnTo(a); Object.assign(goal,{x,y,z}); mark(b.dataset.z);
+    turnTo(a); Object.assign(goal,{t:0,x,y,d:0,z}); mark(b.dataset.z);
   });
 
   /* los colores 3D salen de las variables CSS del modo activo */
@@ -892,7 +911,10 @@ function createScene(){
     const n=m.n, p=m.dot.position;
     turnTo(Math.hypot(n.x,n.z)>.25 ? Math.atan2(n.x,n.z)*180/Math.PI : 0);
     const r=goal.a*Math.PI/180;
+    const lift=Math.asin(clamp(n.y,-1,1))*180/Math.PI;
+    goal.t=Math.abs(lift)>35 ? clamp(lift,-75,80) : 0;
     goal.x=p.x*Math.cos(r)-p.z*Math.sin(r);
+    goal.d=p.x*Math.sin(r)+p.z*Math.cos(r);
     goal.y=clamp(p.y,-355,345);
     goal.z=(p.y>270||p.y<-300)?4.2:3;
     mark(null); dirty=true;
